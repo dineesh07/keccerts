@@ -32,15 +32,40 @@ export async function uploadTemplateImage(
   file: File
 ): Promise<{ success: boolean; publicUrl?: string; filePath?: string; error?: string }> {
   try {
-    const timestamp = Math.floor(Date.now() / 1000);
-    const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
-    const filePath = `${timestamp}-${sanitizedFileName}`;
+    // 1. Try server-side upload API route first (bulletproof on Vercel)
+    const formData = new FormData();
+    formData.append("file", file);
 
-    const { data: uploadData, error: uploadError } = await supabase.storage
+    const apiRes = await fetch("/api/upload-template", {
+      method: "POST",
+      body: formData,
+    });
+
+    if (apiRes.ok) {
+      const json = await apiRes.json();
+      if (json.success && json.publicUrl) {
+        return {
+          success: true,
+          publicUrl: json.publicUrl,
+          filePath: json.filePath,
+        };
+      }
+    }
+  } catch {
+    // Fallback to client SDK if API route is unreachable
+  }
+
+  try {
+    const timestamp = Math.floor(Date.now() / 1000);
+    const sanitizedFileName = (file.name || "template.png").replace(/[^a-zA-Z0-9.-]/g, "_");
+    const filePath = `${timestamp}-${sanitizedFileName}`;
+    const mimeType = file.type && file.type.length > 0 ? file.type : "image/png";
+
+    const { error: uploadError } = await supabase.storage
       .from("certificate-templates")
       .upload(filePath, file, {
-        cacheControl: "3600",
-        upsert: false,
+        contentType: mimeType,
+        upsert: true,
       });
 
     if (uploadError) {
