@@ -6,56 +6,7 @@ import type { EventCard } from "@/types";
 import { supabase } from "@/lib/supabase";
 
 // ── Seed data ─────────────────────────────────────────────────────────────────
-const SEED_EVENTS: EventCard[] = [
-  {
-    id: "code-clash-2024",
-    eventName: "Code Clash 2024",
-    category: "Coding",
-    bannerImageUrl: "/event_coding.png",
-    shortDescription:
-      "An intense 3-hour individual coding competition testing algorithmic thinking and problem-solving speed. Students tackled 5 progressively harder challenges across data structures, dynamic programming, and graph theory.",
-    date: "March 15, 2024",
-    location: "CS Lab Block – A",
-    participantCount: 142,
-    winners: [
-      { type: "individual", name: "Arun Kumar S", rollNo: "21CS101", position: "1st" },
-      { type: "individual", name: "Priya Dharshini R", rollNo: "22CS048", position: "2nd" },
-      { type: "individual", name: "Gowtham M", rollNo: "21CS087", position: "3rd" },
-    ],
-  },
-  {
-    id: "techquiz-2024",
-    eventName: "Tech Trivia Showdown",
-    category: "Quiz",
-    bannerImageUrl: "/event_quiz.png",
-    shortDescription:
-      "A fast-paced technical quiz covering CS fundamentals, current tech trends, and general engineering aptitude. Teams of two competed through rapid-fire rounds with buzzer battles and elimination stages.",
-    date: "April 8, 2024",
-    location: "Seminar Hall – Main Block",
-    participantCount: 96,
-    winners: [
-      { type: "individual", name: "Divya Lakshmi K", rollNo: "22EC012", position: "1st" },
-      { type: "individual", name: "Karthik Raj P", rollNo: "21EC055", position: "2nd" },
-      { type: "individual", name: "Sneha B", rollNo: "22IT033", position: "3rd" },
-    ],
-  },
-  {
-    id: "hackfest-2024",
-    eventName: "HackFest Innovation Sprint",
-    category: "Hackathon",
-    bannerImageUrl: "/event_hackathon.png",
-    shortDescription:
-      "A 24-hour hackathon where teams of 3–4 built real-world solutions around the themes of Smart Campus, Green Tech, and AI for Good. Projects were judged on innovation, feasibility, design, and live demo impact.",
-    date: "May 22–23, 2024",
-    location: "Innovation Hub – KEC Campus",
-    participantCount: 204,
-    winners: [
-      { type: "team", teamName: "Team Nexus", members: ["Rahul V (22CS011)", "Sneha R (22CS023)", "Dev M (22CS034)", "Anya K (22CS045)"], position: "1st" },
-      { type: "team", teamName: "Team Byte Force", members: ["Arjun P (21CS099)", "Meena S (21CS078)"], position: "2nd" },
-      { type: "team", teamName: "Team GreenBit", members: ["Kavi T (22IT012)", "Raj N (22IT031)"], position: "3rd" },
-    ],
-  },
-];
+const SEED_EVENTS: EventCard[] = [];
 
 const STORAGE_KEY = "kec_events_data";
 
@@ -71,7 +22,7 @@ function loadLocalStorage(): EventCard[] {
       // ignore
     }
   }
-  return [...SEED_EVENTS];
+  return [];
 }
 
 function saveLocalStorage(events: EventCard[]): void {
