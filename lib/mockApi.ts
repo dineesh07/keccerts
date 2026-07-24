@@ -9,7 +9,20 @@ import { getEvents } from "@/lib/mockEvents";
 // ---------------------------------------------------------------------------
 // Fallback Mock data
 // ---------------------------------------------------------------------------
-const MOCK_PARTICIPATIONS: Participation[] = [];
+const MOCK_PARTICIPATIONS: Participation[] = [
+  { id: "p-001", rollNo: "23MCA001", studentName: "Aditya Sharma", contestName: "National Coding Championship 2024", date: "2024-03-15", certificateUrl: "https://example.com/certificates/p-001.pdf" },
+  { id: "p-002", rollNo: "23MCA001", studentName: "Aditya Sharma", contestName: "Hack-A-Thon Spring 2024", date: "2024-04-22", certificateUrl: "https://example.com/certificates/p-002.pdf" },
+  { id: "p-003", rollNo: "23MCA001", studentName: "Aditya Sharma", contestName: "Data Science Olympiad 2023", date: "2023-11-08", certificateUrl: "https://example.com/certificates/p-003.pdf" },
+  { id: "p-004", rollNo: "23MCA002", studentName: "Priya Nair", contestName: "National Coding Championship 2024", date: "2024-03-15", certificateUrl: "https://example.com/certificates/p-004.pdf" },
+  { id: "p-005", rollNo: "23MCA002", studentName: "Priya Nair", contestName: "Web Dev Sprint 2024", date: "2024-06-10", certificateUrl: "https://example.com/certificates/p-005.pdf" },
+  { id: "p-006", rollNo: "22BCE045", studentName: "Kiran Menon", contestName: "Hack-A-Thon Spring 2024", date: "2024-04-22", certificateUrl: "https://example.com/certificates/p-006.pdf" },
+  { id: "p-007", rollNo: "22BCE045", studentName: "Kiran Menon", contestName: "Algorithm Bowl 2023", date: "2023-09-20", certificateUrl: "https://example.com/certificates/p-007.pdf" },
+  { id: "p-008", rollNo: "23MCB012", studentName: "Sneha Rajesh", contestName: "Data Science Olympiad 2023", date: "2023-11-08", certificateUrl: "https://example.com/certificates/p-008.pdf" },
+  { id: "p-009", rollNo: "21CSE099", studentName: "Arjun Pillai", contestName: "National Coding Championship 2024", date: "2024-03-15", certificateUrl: "https://example.com/certificates/p-009.pdf" },
+  { id: "p-010", rollNo: "21CSE099", studentName: "Arjun Pillai", contestName: "Web Dev Sprint 2024", date: "2024-06-10", certificateUrl: "https://example.com/certificates/p-010.pdf" },
+  { id: "p-011", rollNo: "21CSE099", studentName: "Arjun Pillai", contestName: "Algorithm Bowl 2023", date: "2023-09-20", certificateUrl: "https://example.com/certificates/p-011.pdf" },
+  { id: "p-012", rollNo: "24MCA005", studentName: "Divya Krishna", contestName: "Web Dev Sprint 2024", date: "2024-06-10", certificateUrl: "https://example.com/certificates/p-012.pdf" },
+];
 
 // ---------------------------------------------------------------------------
 // Search function — queries Supabase DB table `participations`
