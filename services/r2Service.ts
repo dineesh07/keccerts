@@ -5,8 +5,19 @@
  * Falls back gracefully to Cloudflare R2 if configured.
  */
 
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@supabase/supabase-js";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+
+const supabaseUrl =
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||
+  "https://rnqmwvlgllhehfqwuapq.supabase.co";
+
+const supabaseServiceKey =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJucW13dmxnbGxoZWhmcXd1YXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2NDY0NTcsImV4cCI6MjEwMDIyMjQ1N30.r6Cy9KR81A528RtI4laK9fStHmNlWFxPJuBKYTebUKI";
+
+const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
 const accountId = process.env.R2_ACCOUNT_ID || "";
 const accessKeyId = process.env.R2_ACCESS_KEY_ID || "";
@@ -32,9 +43,16 @@ export async function uploadCertificateToR2(
   filename: string,
   contentType = "image/png"
 ): Promise<string> {
-  // 1. Primary: Upload PNG to Supabase Storage bucket "certificates"
+  // 1. Primary: Upload PNG to Supabase Storage bucket "certificates" using admin privileges
   try {
-    const { data: uploadData, error: uploadErr } = await supabase.storage
+    // Ensure bucket exists
+    try {
+      await supabaseAdmin.storage.createBucket("certificates", { public: true });
+    } catch {
+      // ignore
+    }
+
+    const { data: uploadData, error: uploadErr } = await supabaseAdmin.storage
       .from("certificates")
       .upload(filename, fileBuffer, {
         contentType,
@@ -43,7 +61,7 @@ export async function uploadCertificateToR2(
       });
 
     if (!uploadErr) {
-      const { data: publicUrlData } = supabase.storage
+      const { data: publicUrlData } = supabaseAdmin.storage
         .from("certificates")
         .getPublicUrl(filename);
 
@@ -77,7 +95,7 @@ export async function uploadCertificateToR2(
   }
 
   // 3. Fallback: Get public URL from Supabase Storage
-  const { data: fallbackUrlData } = supabase.storage
+  const { data: fallbackUrlData } = supabaseAdmin.storage
     .from("certificates")
     .getPublicUrl(filename);
 
