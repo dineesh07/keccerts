@@ -75,11 +75,30 @@ export async function renderCertificateBuffer(
   rollNo: string,
   config: TemplateConfig
 ): Promise<Buffer> {
-  const width = 1200;
-  const height = 850;
+  const scale = 2; // 2x Ultra-HD Resolution multiplier
+  const width = 1200 * scale;  // 2400px
+  const height = 850 * scale;  // 1700px
 
-  const nameCfg = config.name || { x: 600, y: 410, size: 52, color: "#000000", align: "center", font: "Poppins-Bold.ttf" };
-  const rollCfg = config.rollNo || { x: 600, y: 480, size: 28, color: "#444444", align: "center", font: "Poppins-Regular.ttf" };
+  const rawNameCfg = config.name || { x: 600, y: 410, size: 52, color: "#000000", align: "center", font: "Poppins-Bold.ttf" };
+  const rawRollCfg = config.rollNo || { x: 600, y: 480, size: 28, color: "#444444", align: "center", font: "Poppins-Regular.ttf" };
+
+  const nameCfg = {
+    x: rawNameCfg.x * scale,
+    y: rawNameCfg.y * scale,
+    size: rawNameCfg.size * scale,
+    color: rawNameCfg.color || "#000000",
+    align: rawNameCfg.align,
+    font: rawNameCfg.font,
+  };
+
+  const rollCfg = {
+    x: rawRollCfg.x * scale,
+    y: rawRollCfg.y * scale,
+    size: rawRollCfg.size * scale,
+    color: rawRollCfg.color || "#444444",
+    align: rawRollCfg.align,
+    font: rawRollCfg.font,
+  };
 
   const nameAnchor = nameCfg.align === "center" ? "middle" : nameCfg.align === "right" ? "end" : "start";
   const rollAnchor = rollCfg.align === "center" ? "middle" : rollCfg.align === "right" ? "end" : "start";
@@ -120,16 +139,16 @@ export async function renderCertificateBuffer(
     }
   }
 
-  // Create clean SVG string with SVG text elements
+  // Create clean SVG string with SVG text elements scaled for 2400x1700 Ultra-HD resolution
   const svg = `
     <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
       ${
         backgroundHref
           ? `<image href="${backgroundHref}" width="${width}" height="${height}" preserveAspectRatio="none"/>`
-          : `<rect width="${width}" height="${height}" fill="#ffffff" stroke="#cbd5e1" stroke-width="4"/>`
+          : `<rect width="${width}" height="${height}" fill="#ffffff" stroke="#cbd5e1" stroke-width="8"/>`
       }
-      <text x="${nameCfg.x}" y="${nameCfg.y}" font-family="${nameFont.fontFamily}, sans-serif" font-size="${nameCfg.size}" font-weight="${nameFont.fontWeight}" fill="${nameCfg.color || "#000000"}" text-anchor="${nameAnchor}" dominant-baseline="middle">${escapeXml(studentName)}</text>
-      <text x="${rollCfg.x}" y="${rollCfg.y}" font-family="${rollFont.fontFamily}, sans-serif" font-size="${rollCfg.size}" font-weight="${rollFont.fontWeight}" fill="${rollCfg.color || "#444444"}" text-anchor="${rollAnchor}" dominant-baseline="middle">${escapeXml(rollNo)}</text>
+      <text x="${nameCfg.x}" y="${nameCfg.y}" font-family="${nameFont.fontFamily}, sans-serif" font-size="${nameCfg.size}" font-weight="${nameFont.fontWeight}" fill="${nameCfg.color}" text-anchor="${nameAnchor}" dominant-baseline="middle">${escapeXml(studentName)}</text>
+      <text x="${rollCfg.x}" y="${rollCfg.y}" font-family="${rollFont.fontFamily}, sans-serif" font-size="${rollCfg.size}" font-weight="${rollFont.fontWeight}" fill="${rollCfg.color}" text-anchor="${rollAnchor}" dominant-baseline="middle">${escapeXml(rollNo)}</text>
     </svg>
   `;
 
