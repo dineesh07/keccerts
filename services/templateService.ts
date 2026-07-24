@@ -2,12 +2,23 @@
  * Template Service — DB operations for certificate_templates table
  */
 
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@supabase/supabase-js";
 import type { CertificateTemplate, TemplateConfig } from "@/types";
+
+const supabaseUrl =
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||
+  "https://rnqmwvlgllhehfqwuapq.supabase.co";
+
+const supabaseServiceKey =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJucW13dmxnbGxoZWhmcXd1YXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2NDY0NTcsImV4cCI6MjEwMDIyMjQ1N30.r6Cy9KR81A528RtI4laK9fStHmNlWFxPJuBKYTebUKI";
+
+const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
 export async function getTemplateByEventId(eventId: string): Promise<CertificateTemplate | null> {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from("certificate_templates")
       .select("*")
       .eq("event_id", eventId)
@@ -61,7 +72,7 @@ export async function uploadTemplateImage(
     const filePath = `${timestamp}-${sanitizedFileName}`;
     const mimeType = file.type && file.type.length > 0 ? file.type : "image/png";
 
-    const { error: uploadError } = await supabase.storage
+    const { error: uploadError } = await supabaseAdmin.storage
       .from("certificate-templates")
       .upload(filePath, file, {
         contentType: mimeType,
@@ -73,7 +84,7 @@ export async function uploadTemplateImage(
       return { success: false, error: uploadError.message };
     }
 
-    const { data: publicUrlData } = supabase.storage
+    const { data: publicUrlData } = supabaseAdmin.storage
       .from("certificate-templates")
       .getPublicUrl(filePath);
 
@@ -94,7 +105,7 @@ export async function uploadTemplateImage(
 
 export async function deleteTemplateStorageObject(filePath: string): Promise<void> {
   try {
-    await supabase.storage.from("certificate-templates").remove([filePath]);
+    await supabaseAdmin.storage.from("certificate-templates").remove([filePath]);
   } catch (err) {
     console.warn("Failed to delete uploaded storage object after DB insert error:", err);
   }
@@ -106,7 +117,7 @@ export async function saveTemplate(
   config: TemplateConfig
 ): Promise<{ success: boolean; data?: CertificateTemplate; error?: string }> {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from("certificate_templates")
       .upsert(
         {
