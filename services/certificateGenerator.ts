@@ -47,23 +47,26 @@ function resolveFont(fontVal: string | undefined, defaultWeight = "400"): Resolv
 
 function loadAllFontBuffers(): Buffer[] {
   const fontsDir = path.join(process.cwd(), "public", "fonts");
-  if (!fs.existsSync(fontsDir)) return [];
-  try {
-    const files = fs.readdirSync(fontsDir);
-    const buffers: Buffer[] = [];
-    for (const f of files) {
-      if (f.endsWith(".ttf") || f.endsWith(".otf")) {
-        try {
-          buffers.push(fs.readFileSync(path.join(fontsDir, f)));
-        } catch {
-          // ignore individual read error
+  const buffers: Buffer[] = [];
+
+  if (fs.existsSync(fontsDir)) {
+    try {
+      const files = fs.readdirSync(fontsDir);
+      for (const f of files) {
+        if (f.endsWith(".ttf") || f.endsWith(".otf")) {
+          try {
+            buffers.push(fs.readFileSync(path.join(fontsDir, f)));
+          } catch {
+            // ignore
+          }
         }
       }
+    } catch {
+      // ignore
     }
-    return buffers;
-  } catch {
-    return [];
   }
+
+  return buffers;
 }
 
 export async function renderCertificateBuffer(
@@ -125,8 +128,8 @@ export async function renderCertificateBuffer(
           ? `<image href="${backgroundHref}" width="${width}" height="${height}" preserveAspectRatio="none"/>`
           : `<rect width="${width}" height="${height}" fill="#ffffff" stroke="#cbd5e1" stroke-width="4"/>`
       }
-      <text x="${nameCfg.x}" y="${nameCfg.y}" font-family="${nameFont.fontFamily}" font-size="${nameCfg.size}" font-weight="${nameFont.fontWeight}" fill="${nameCfg.color || "#000000"}" text-anchor="${nameAnchor}" dominant-baseline="middle">${escapeXml(studentName)}</text>
-      <text x="${rollCfg.x}" y="${rollCfg.y}" font-family="${rollFont.fontFamily}" font-size="${rollCfg.size}" font-weight="${rollFont.fontWeight}" fill="${rollCfg.color || "#444444"}" text-anchor="${rollAnchor}" dominant-baseline="middle">${escapeXml(rollNo)}</text>
+      <text x="${nameCfg.x}" y="${nameCfg.y}" font-family="${nameFont.fontFamily}, sans-serif" font-size="${nameCfg.size}" font-weight="${nameFont.fontWeight}" fill="${nameCfg.color || "#000000"}" text-anchor="${nameAnchor}" dominant-baseline="middle">${escapeXml(studentName)}</text>
+      <text x="${rollCfg.x}" y="${rollCfg.y}" font-family="${rollFont.fontFamily}, sans-serif" font-size="${rollCfg.size}" font-weight="${rollFont.fontWeight}" fill="${rollCfg.color || "#444444"}" text-anchor="${rollAnchor}" dominant-baseline="middle">${escapeXml(rollNo)}</text>
     </svg>
   `;
 
@@ -137,8 +140,8 @@ export async function renderCertificateBuffer(
     font: {
       fontDirs: fs.existsSync(fontsDir) ? [fontsDir] : [],
       fontBuffers,
-      defaultFontFamily: nameFont.fontFamily,
-      loadSystemFonts: false,
+      defaultFontFamily: nameFont.fontFamily || "sans-serif",
+      loadSystemFonts: true,
     } as any,
     fitTo: {
       mode: "width",
