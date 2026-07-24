@@ -2,11 +2,8 @@
 
 A modern, full-stack web application for generating, managing, and verifying student event certificates. Built with **Next.js 16 (App Router)**, **TypeScript**, **Tailwind CSS v4**, and **Supabase**.
 
----
 
-## 📌 Repository Description (for GitHub About section)
 
-> A modern, full-stack web platform built with Next.js 16, TypeScript, and Supabase for generating, issuing, and verifying student event certificates with dynamic template design and bulk CSV processing.
 
 ---
 
