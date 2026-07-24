@@ -13,8 +13,8 @@ export const metadata: Metadata = {
   authors: [{ name: "Kongu Engineering College" }],
   icons: {
     icon: [
-      { url: "/favicon.ico" },
       { url: "/icon.png", type: "image/png" },
+      { url: "/favicon.ico", type: "image/png" },
     ],
     apple: "/apple-icon.png",
   },
