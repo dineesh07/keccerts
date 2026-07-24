@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { SearchForm } from "@/components/SearchForm";
 import { ResultsList } from "@/components/ResultsList";
 import { SearchSkeleton } from "@/components/SearchSkeleton";
@@ -18,8 +18,19 @@ type PageState =
 
 export function HomePageClient({ initialStats }: { initialStats: PortalStats }) {
   const [pageState, setPageState] = useState<PageState>({ status: "idle" });
-  const [stats] = useState<PortalStats>(initialStats);
+  const [stats, setStats] = useState<PortalStats>(initialStats);
   const resultsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    fetch("/api/stats")
+      .then((res) => res.json())
+      .then((res) => {
+        if (res.success && res.data) {
+          setStats(res.data);
+        }
+      })
+      .catch((err) => console.warn("Failed to fetch live stats:", err));
+  }, []);
 
   async function handleSearch(query: SearchQuery) {
     setPageState({ status: "loading" });
