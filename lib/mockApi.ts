@@ -38,56 +38,25 @@ export async function searchParticipations(
 
     if (!error) {
       if (data && data.length > 0) {
-        // Fetch current storage bucket filenames to verify file existence
-        const { data: bucketFiles } = await supabase.storage.from("certificates").list();
-        const fileSet = new Set((bucketFiles || []).map((f) => f.name));
+        const matches: Participation[] = data.map((row) => ({
+          id: row.id,
+          rollNo: row.roll_no,
+          studentName: row.student_name,
+          contestName: row.contest_name,
+          date: row.date,
+          certificateUrl: row.certificate_url,
+        }));
 
-        const validMatches: Participation[] = [];
-        const orphanedIds: string[] = [];
-
-        for (const row of data) {
-          let isValid = true;
-          if (row.certificate_url && row.certificate_url.includes("/storage/v1/object/public/certificates/")) {
-            const filename = row.certificate_url.split("/certificates/").pop()?.split("?")[0];
-            if (filename && fileSet.size > 0 && !fileSet.has(filename)) {
-              isValid = false;
-              orphanedIds.push(row.id);
-            }
-          }
-
-          if (isValid) {
-            validMatches.push({
-              id: row.id,
-              rollNo: row.roll_no,
-              studentName: row.student_name,
-              contestName: row.contest_name,
-              date: row.date,
-              certificateUrl: row.certificate_url,
-            });
-          }
-        }
-
-        // Clean orphaned records asynchronously in background
-        if (orphanedIds.length > 0) {
-          supabase.from("participations").delete().in("id", orphanedIds).then(() => {
-            console.log(`Cleaned ${orphanedIds.length} orphaned participation DB rows.`);
-          });
-        }
-
-        if (validMatches.length > 0) {
-          const first = validMatches[0];
-          return {
-            success: true,
-            data: {
-              student: { rollNo: first.rollNo, studentName: first.studentName },
-              participations: validMatches.sort(
-                (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-              ),
-            },
-          };
-        } else {
-          return { success: false, error: "NO_RESULTS" };
-        }
+        const first = matches[0];
+        return {
+          success: true,
+          data: {
+            student: { rollNo: first.rollNo, studentName: first.studentName },
+            participations: matches.sort(
+              (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+            ),
+          },
+        };
       } else {
         // Supabase DB query completed successfully but found 0 matches
         return { success: false, error: "NO_RESULTS" };
