@@ -52,9 +52,12 @@ export async function uploadCertificateToR2(
       // ignore
     }
 
+    // Use Blob with explicit MIME type to force binary transport.
+    // Passing a plain Buffer to Supabase SDK on Vercel can result in UTF-8 corruption.
+    const fileBlob = new Blob([fileBuffer], { type: contentType });
     const { data: uploadData, error: uploadErr } = await supabaseAdmin.storage
       .from("certificates")
-      .upload(filename, fileBuffer, {
+      .upload(filename, fileBlob, {
         contentType,
         cacheControl: "3600",
         upsert: true,
