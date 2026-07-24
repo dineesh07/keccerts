@@ -1,74 +1,27 @@
 /**
  * Server-side Certificate Generator Service
- * Renders student Name & Roll Number dynamically on top of a template image
- * using SVG + Resvg, generating a real PNG image buffer.
+ * Uses `sharp` to composite SVG text over a background template image.
+ * sharp is Vercel-compatible (official support) unlike @resvg/resvg-js which needs platform-specific binaries.
  */
 
-import { Resvg } from "@resvg/resvg-js";
+import sharp from "sharp";
 import fs from "fs";
 import path from "path";
 import type { TemplateConfig } from "@/types";
 
-interface ResolvedFont {
-  fontCss: string;
-  fontFamily: string;
-  fontWeight: string;
+function escapeXml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
 }
 
-const fontCache = new Map<string, ResolvedFont>();
-
-function resolveFont(fontVal: string | undefined, defaultWeight = "400"): ResolvedFont {
-  const rawFont = (fontVal || "").trim();
-  const fontLower = rawFont.toLowerCase();
-
-  let familyName = "Poppins";
-  let weight = defaultWeight;
-
-  if (fontLower.includes("inter")) {
-    familyName = "Inter";
-    if (fontLower.includes("bold")) weight = "700";
-  } else if (fontLower.includes("plus jakarta") || fontLower.includes("plusjakartasans")) {
-    familyName = "Plus Jakarta Sans";
-    if (fontLower.includes("bold")) weight = "700";
-  } else if (fontLower.includes("roboto")) {
-    familyName = "Roboto";
-    if (fontLower.includes("bold")) weight = "700";
-  } else {
-    familyName = "Poppins";
-    if (fontLower.includes("bold")) weight = "700";
-  }
-
-  return {
-    fontCss: "",
-    fontFamily: familyName,
-    fontWeight: weight,
-  };
-}
-
-import { getEmbeddedFontBuffers } from "@/lib/embeddedFonts";
-
-function loadAllFontBuffers(): Buffer[] {
-  const buffers: Buffer[] = getEmbeddedFontBuffers();
-  const fontsDir = path.join(process.cwd(), "public", "fonts");
-
-  if (fs.existsSync(fontsDir)) {
-    try {
-      const files = fs.readdirSync(fontsDir);
-      for (const f of files) {
-        if (f.endsWith(".ttf") || f.endsWith(".otf")) {
-          try {
-            buffers.push(fs.readFileSync(path.join(fontsDir, f)));
-          } catch {
-            // ignore
-          }
-        }
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  return buffers;
+function resolveFontWeight(fontFile: string | undefined, defaultWeight = "400"): string {
+  const f = (fontFile || "").toLowerCase();
+  if (f.includes("bold") || f.includes("700")) return "700";
+  return defaultWeight;
 }
 
 export async function renderCertificateBuffer(
@@ -77,106 +30,120 @@ export async function renderCertificateBuffer(
   rollNo: string,
   config: TemplateConfig
 ): Promise<Buffer> {
-  const scale = 2; // 2x Ultra-HD Resolution multiplier
-  const width = 1200 * scale;  // 2400px
-  const height = 850 * scale;  // 1700px
-
-  const rawNameCfg = config.name || { x: 600, y: 410, size: 52, color: "#000000", align: "center", font: "Poppins-Bold.ttf" };
-  const rawRollCfg = config.rollNo || { x: 600, y: 480, size: 28, color: "#444444", align: "center", font: "Poppins-Regular.ttf" };
-
-  const nameCfg = {
-    x: rawNameCfg.x * scale,
-    y: rawNameCfg.y * scale,
-    size: rawNameCfg.size * scale,
-    color: rawNameCfg.color || "#000000",
-    align: rawNameCfg.align,
-    font: rawNameCfg.font,
-  };
-
-  const rollCfg = {
-    x: rawRollCfg.x * scale,
-    y: rawRollCfg.y * scale,
-    size: rawRollCfg.size * scale,
-    color: rawRollCfg.color || "#444444",
-    align: rawRollCfg.align,
-    font: rawRollCfg.font,
-  };
-
-  const nameAnchor = nameCfg.align === "center" ? "middle" : nameCfg.align === "right" ? "end" : "start";
-  const rollAnchor = rollCfg.align === "center" ? "middle" : rollCfg.align === "right" ? "end" : "start";
-
-  // Resolve TTF font family names and weights
-  const nameFont = resolveFont(nameCfg.font, "700");
-  const rollFont = resolveFont(rollCfg.font, "400");
-
-  let backgroundHref = "";
+  // Step 1: Fetch the background template image as a buffer
+  let bgBuffer: Buffer | null = null;
 
   if (templateImageUrl) {
     if (templateImageUrl.startsWith("http://") || templateImageUrl.startsWith("https://")) {
       try {
         const res = await fetch(templateImageUrl);
         if (res.ok) {
-          const arrayBuf = await res.arrayBuffer();
-          const base64 = Buffer.from(arrayBuf).toString("base64");
-          const contentType = res.headers.get("content-type") || "image/png";
-          backgroundHref = `data:${contentType};base64,${base64}`;
+          bgBuffer = Buffer.from(await res.arrayBuffer());
+        } else {
+          console.warn("Failed to fetch template image, status:", res.status);
         }
       } catch (err) {
-        console.warn("Could not fetch background template image from URL:", templateImageUrl, err);
+        console.warn("Failed to fetch template image URL:", err);
       }
     } else if (templateImageUrl.startsWith("data:image")) {
-      backgroundHref = templateImageUrl;
+      const base64 = templateImageUrl.split(",")[1];
+      if (base64) bgBuffer = Buffer.from(base64, "base64");
     } else {
-      try {
-        const cleanPath = templateImageUrl.startsWith("/") ? templateImageUrl.slice(1) : templateImageUrl;
-        const localPath = path.join(process.cwd(), "public", cleanPath);
-        if (fs.existsSync(localPath)) {
-          const buf = fs.readFileSync(localPath);
-          const ext = path.extname(localPath).replace(".", "") || "png";
-          backgroundHref = `data:image/${ext};base64,${buf.toString("base64")}`;
-        }
-      } catch (err) {
-        console.warn("Could not read local background template image:", templateImageUrl, err);
-      }
+      const cleanPath = templateImageUrl.startsWith("/") ? templateImageUrl.slice(1) : templateImageUrl;
+      const localPath = path.join(process.cwd(), "public", cleanPath);
+      if (fs.existsSync(localPath)) bgBuffer = fs.readFileSync(localPath);
     }
   }
 
-  // Create clean SVG string with SVG text elements scaled for 2400x1700 Ultra-HD resolution
-  const svg = `
-    <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-      ${
-        backgroundHref
-          ? `<image href="${backgroundHref}" width="${width}" height="${height}" preserveAspectRatio="none"/>`
-          : `<rect width="${width}" height="${height}" fill="#ffffff" stroke="#cbd5e1" stroke-width="8"/>`
-      }
-      <text x="${nameCfg.x}" y="${nameCfg.y}" font-family="${nameFont.fontFamily}" font-size="${nameCfg.size}" font-weight="${nameFont.fontWeight}" fill="${nameCfg.color}" text-anchor="${nameAnchor}" dominant-baseline="middle">${escapeXml(studentName)}</text>
-      <text x="${rollCfg.x}" y="${rollCfg.y}" font-family="${rollFont.fontFamily}" font-size="${rollCfg.size}" font-weight="${rollFont.fontWeight}" fill="${rollCfg.color}" text-anchor="${rollAnchor}" dominant-baseline="middle">${escapeXml(rollNo)}</text>
+  // Step 2: Get actual image dimensions from background
+  let canvasWidth = 1200;
+  let canvasHeight = 850;
+
+  if (bgBuffer) {
+    try {
+      const meta = await sharp(bgBuffer).metadata();
+      canvasWidth = meta.width || 1200;
+      canvasHeight = meta.height || 850;
+    } catch (err) {
+      console.warn("Could not read image metadata:", err);
+    }
+  }
+
+  // Step 3: Read config and scale to actual image size
+  // Config X/Y coords are stored against a 1200x850 canvas (as set by TemplateEditor)
+  const scaleX = canvasWidth / 1200;
+  const scaleY = canvasHeight / 850;
+
+  const nameCfg = config.name || { x: 600, y: 410, size: 52, color: "#000000", align: "center", font: "Poppins-Bold.ttf" };
+  const rollCfg = config.rollNo || { x: 600, y: 480, size: 28, color: "#444444", align: "center", font: "Poppins-Regular.ttf" };
+
+  const nameX = Math.round(nameCfg.x * scaleX);
+  const nameY = Math.round(nameCfg.y * scaleY);
+  const nameSize = Math.round(nameCfg.size * Math.min(scaleX, scaleY));
+  const nameColor = nameCfg.color || "#000000";
+  const nameFontWeight = resolveFontWeight(nameCfg.font, "700");
+  const nameAnchor = nameCfg.align === "center" ? "middle" : nameCfg.align === "right" ? "end" : "start";
+
+  const rollX = Math.round(rollCfg.x * scaleX);
+  const rollY = Math.round(rollCfg.y * scaleY);
+  const rollSize = Math.round(rollCfg.size * Math.min(scaleX, scaleY));
+  const rollColor = rollCfg.color || "#444444";
+  const rollFontWeight = resolveFontWeight(rollCfg.font, "400");
+  const rollAnchor = rollCfg.align === "center" ? "middle" : rollCfg.align === "right" ? "end" : "start";
+
+  // Step 4: Create SVG text overlay (transparent background, just text)
+  const svgOverlay = Buffer.from(`
+    <svg width="${canvasWidth}" height="${canvasHeight}" xmlns="http://www.w3.org/2000/svg">
+      <text
+        x="${nameX}"
+        y="${nameY}"
+        font-family="Arial, Helvetica, sans-serif"
+        font-size="${nameSize}"
+        font-weight="${nameFontWeight}"
+        fill="${nameColor}"
+        text-anchor="${nameAnchor}"
+        dominant-baseline="middle"
+      >${escapeXml(studentName)}</text>
+      <text
+        x="${rollX}"
+        y="${rollY}"
+        font-family="Arial, Helvetica, sans-serif"
+        font-size="${rollSize}"
+        font-weight="${rollFontWeight}"
+        fill="${rollColor}"
+        text-anchor="${rollAnchor}"
+        dominant-baseline="middle"
+      >${escapeXml(rollNo)}</text>
     </svg>
-  `;
+  `);
 
-  const fontBuffers = loadAllFontBuffers();
+  // Step 5: Composite SVG text over background using sharp
+  let base: ReturnType<typeof sharp>;
 
-  const resvg = new Resvg(svg, {
-    font: {
-      fontBuffers,
-      defaultFontFamily: "Poppins",
-      loadSystemFonts: false,
-    } as any,
-    fitTo: {
-      mode: "width",
-      value: width,
-    },
-  });
+  if (bgBuffer) {
+    base = sharp(bgBuffer).png();
+  } else {
+    // No background: create a white canvas
+    base = sharp({
+      create: {
+        width: canvasWidth,
+        height: canvasHeight,
+        channels: 4,
+        background: { r: 255, g: 255, b: 255, alpha: 1 },
+      },
+    }).png();
+  }
 
-  const pngData = resvg.render();
-  return Buffer.from(pngData.asPng());
-}
+  const outputBuffer = await base
+    .composite([
+      {
+        input: svgOverlay,
+        top: 0,
+        left: 0,
+      },
+    ])
+    .png({ compressionLevel: 6 })
+    .toBuffer();
 
-function escapeXml(unsafe: string): string {
-  return unsafe
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
+  return outputBuffer;
 }
