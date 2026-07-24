@@ -45,9 +45,11 @@ function resolveFont(fontVal: string | undefined, defaultWeight = "400"): Resolv
   };
 }
 
+import { getEmbeddedFontBuffers } from "@/lib/embeddedFonts";
+
 function loadAllFontBuffers(): Buffer[] {
+  const buffers: Buffer[] = getEmbeddedFontBuffers();
   const fontsDir = path.join(process.cwd(), "public", "fonts");
-  const buffers: Buffer[] = [];
 
   if (fs.existsSync(fontsDir)) {
     try {
@@ -147,20 +149,18 @@ export async function renderCertificateBuffer(
           ? `<image href="${backgroundHref}" width="${width}" height="${height}" preserveAspectRatio="none"/>`
           : `<rect width="${width}" height="${height}" fill="#ffffff" stroke="#cbd5e1" stroke-width="8"/>`
       }
-      <text x="${nameCfg.x}" y="${nameCfg.y}" font-family="${nameFont.fontFamily}, sans-serif" font-size="${nameCfg.size}" font-weight="${nameFont.fontWeight}" fill="${nameCfg.color}" text-anchor="${nameAnchor}" dominant-baseline="middle">${escapeXml(studentName)}</text>
-      <text x="${rollCfg.x}" y="${rollCfg.y}" font-family="${rollFont.fontFamily}, sans-serif" font-size="${rollCfg.size}" font-weight="${rollFont.fontWeight}" fill="${rollCfg.color}" text-anchor="${rollAnchor}" dominant-baseline="middle">${escapeXml(rollNo)}</text>
+      <text x="${nameCfg.x}" y="${nameCfg.y}" font-family="${nameFont.fontFamily}" font-size="${nameCfg.size}" font-weight="${nameFont.fontWeight}" fill="${nameCfg.color}" text-anchor="${nameAnchor}" dominant-baseline="middle">${escapeXml(studentName)}</text>
+      <text x="${rollCfg.x}" y="${rollCfg.y}" font-family="${rollFont.fontFamily}" font-size="${rollCfg.size}" font-weight="${rollFont.fontWeight}" fill="${rollCfg.color}" text-anchor="${rollAnchor}" dominant-baseline="middle">${escapeXml(rollNo)}</text>
     </svg>
   `;
 
-  const fontsDir = path.join(process.cwd(), "public", "fonts");
   const fontBuffers = loadAllFontBuffers();
 
   const resvg = new Resvg(svg, {
     font: {
-      fontDirs: fs.existsSync(fontsDir) ? [fontsDir] : [],
       fontBuffers,
-      defaultFontFamily: nameFont.fontFamily || "sans-serif",
-      loadSystemFonts: true,
+      defaultFontFamily: "Poppins",
+      loadSystemFonts: false,
     } as any,
     fitTo: {
       mode: "width",
