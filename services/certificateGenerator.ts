@@ -125,18 +125,29 @@ export async function renderCertificateBuffer(
   const rollAnchor = rollCfg.align === "center" ? "middle" : rollCfg.align === "right" ? "end" : "start";
 
   // Step 5: Build standard SVG containing the text layout
+  // We include a white background rect so we can see the text clearly (black text on transparent is invisible in browser image viewer)
   const svgOverlayString = `<svg xmlns="http://www.w3.org/2000/svg" width="${canvasWidth}" height="${canvasHeight}">
     <rect width="100%" height="100%" fill="white"/>
     <text
-      x="${canvasWidth / 2}"
-      y="${canvasHeight / 2}"
-      font-size="72"
-      fill="red"
-      text-anchor="middle"
-      font-family="sans-serif"
-    >
-      HELLO WORLD
-    </text>
+      x="${nameX}"
+      y="${nameY}"
+      font-family="Poppins"
+      font-size="${nameSize}"
+      font-weight="${nameFontWeight}"
+      fill="${nameColor}"
+      text-anchor="${nameAnchor}"
+      dominant-baseline="central"
+    >${escapeXml(studentName)}</text>
+    <text
+      x="${rollX}"
+      y="${rollY}"
+      font-family="Poppins"
+      font-size="${rollSize}"
+      font-weight="${rollFontWeight}"
+      fill="${rollColor}"
+      text-anchor="${rollAnchor}"
+      dominant-baseline="central"
+    >${escapeXml(rollNo)}</text>
   </svg>`;
 
   console.log("========== SVG RENDER ==========");
@@ -145,9 +156,15 @@ export async function renderCertificateBuffer(
   console.log("================================");
 
   // Step 6: Render SVG text layer to PNG using `@resvg/resvg-js`
+  // We inject custom font buffers from embeddedFonts.ts directly into resvg.
   const resvg = new Resvg(svgOverlayString, {
     font: {
-      loadSystemFonts: true,
+      fontBuffers: [
+        Buffer.from(POPPINS_BOLD_BASE64, "base64"),
+        Buffer.from(POPPINS_REGULAR_BASE64, "base64"),
+      ],
+      defaultFontFamily: "Poppins",
+      loadSystemFonts: false,
     },
   } as any);
 
