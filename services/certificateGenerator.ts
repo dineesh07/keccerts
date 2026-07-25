@@ -193,30 +193,22 @@ export async function renderCertificateBuffer(
   });
 
   // Step 5: Create SVG text overlay at the output canvas size
-  // Note: We use dy="0.35em" instead of dominant-baseline="middle"
-  // because dominant-baseline has poor or inconsistent support in some versions of librsvg.
-  const svgOverlayString = `<svg width="${canvasWidth}" height="${canvasHeight}" xmlns="http://www.w3.org/2000/svg">
-      <text
-        x="${nameX}"
-        y="${nameY}"
-        font-family="sans-serif"
-        font-size="${nameSize}"
-        font-weight="${nameFontWeight}"
-        fill="${nameColor}"
-        text-anchor="${nameAnchor}"
-        dy="0.35em"
-      >${escapeXml(studentName)}</text>
-      <text
-        x="${rollX}"
-        y="${rollY}"
-        font-family="sans-serif"
-        font-size="${rollSize}"
-        font-weight="${rollFontWeight}"
-        fill="${rollColor}"
-        text-anchor="${rollAnchor}"
-        dy="0.35em"
-      >${escapeXml(rollNo)}</text>
-    </svg>`;
+  // Step 5: Create SVG text overlay at the output canvas size
+  const svgOverlayString = `
+<svg xmlns="http://www.w3.org/2000/svg" width="${canvasWidth}" height="${canvasHeight}">
+  <rect width="100%" height="100%" fill="white"/>
+
+  <text
+    x="${canvasWidth / 2}"
+    y="${canvasHeight / 2}"
+    font-size="72"
+    fill="red"
+    text-anchor="middle"
+  >
+    HELLO WORLD
+  </text>
+</svg>
+`;
 
   // Detailed SVG debugging requested in prompt
   console.log("========== SVG DEBUG ==========");
