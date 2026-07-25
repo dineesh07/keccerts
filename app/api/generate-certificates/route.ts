@@ -73,16 +73,9 @@ export async function POST(req: Request) {
         // 2. Render certificate image
         const imageBuffer = await renderCertificateBuffer(templateUrl, cleanName, rollUpper, config);
 
-        const certificateUrl = ""; // Mock declaration to bypass TS compilation errors
-
-        // TEMPORARY DIAGNOSTIC TEST: Return the PNG buffer directly
-        return new NextResponse(new Uint8Array(imageBuffer), {
-          status: 200,
-          headers: {
-            "Content-Type": "image/png",
-            "Cache-Control": "no-store",
-          },
-        });
+        // 3. Upload certificate to Cloudflare R2 / Supabase Storage
+        const filename = `${eventId}-${rollUpper.toLowerCase()}-${Date.now()}.png`;
+        const certificateUrl = await uploadCertificateToR2(imageBuffer, filename, "image/png");
 
         // 4. Upsert student profile in Supabase
         await supabase.from("students").upsert(

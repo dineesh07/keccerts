@@ -1,6 +1,8 @@
 import sharp from "sharp";
 import fs from "fs";
 import path from "path";
+import { Resvg } from "@resvg/resvg-js";
+import { POPPINS_BOLD_BASE64, POPPINS_REGULAR_BASE64 } from "@/lib/embeddedFonts";
 import type { TemplateConfig } from "@/types";
 
 // Maximum output certificate dimensions (keeps file size manageable while retaining quality)
@@ -11,46 +13,6 @@ const MAX_OUTPUT_HEIGHT = 1754;
 // The reference canvas size used by the TemplateEditor for coordinate storage
 const EDITOR_CANVAS_WIDTH = 1200;
 const EDITOR_CANVAS_HEIGHT = 850;
-
-/**
- * Configure fontconfig dynamically to search local public/fonts folder.
- * This is required on Vercel because serverless environments have no system fonts,
- * and librsvg's inline base64 @font-face is not supported or blocked by sandbox policies.
- */
-function initFontconfig() {
-  if (process.env.NEXT_RUNTIME === "edge") return;
-
-  try {
-    const fontsDir = path.join(process.cwd(), "public", "fonts");
-    const fontconfigDir = "/tmp/fontconfig";
-    const cacheDir = "/tmp/fontconfig-cache";
-    const confPath = path.join(fontconfigDir, "fonts.conf");
-
-    if (!fs.existsSync(fontconfigDir)) {
-      fs.mkdirSync(fontconfigDir, { recursive: true });
-    }
-    if (!fs.existsSync(cacheDir)) {
-      fs.mkdirSync(cacheDir, { recursive: true });
-    }
-
-    const confContent = `<?xml version="1.0"?>
-<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
-<fontconfig>
-  <dir>${fontsDir}</dir>
-  <cachedir>${cacheDir}</cachedir>
-  <config></config>
-</fontconfig>`;
-
-    fs.writeFileSync(confPath, confContent);
-    process.env.FONTCONFIG_PATH = fontconfigDir;
-    console.log(`[fontconfig] Initialized successfully at ${fontconfigDir} pointing to ${fontsDir}`);
-  } catch (err) {
-    console.error("[fontconfig] Initialization failed:", err);
-  }
-}
-
-// Run initialization once at module load
-initFontconfig();
 
 function escapeXml(str: string): string {
   return str
@@ -65,15 +27,6 @@ function resolveFontWeight(fontFile: string | undefined, defaultWeight = "400"):
   const f = (fontFile || "").toLowerCase();
   if (f.includes("bold") || f.includes("700")) return "bold";
   return defaultWeight === "700" ? "bold" : "normal";
-}
-
-function getFontFamilyName(fontFile: string | undefined): string {
-  if (!fontFile) return "Poppins";
-  const name = fontFile.trim().toLowerCase();
-  if (name.includes("poppins")) return "Poppins";
-  if (name.includes("inter")) return "Inter";
-  if (name.includes("plusjakartasans") || name.includes("plus jakarta sans")) return "Plus Jakarta Sans";
-  return "Poppins"; // Fallback to Poppins
 }
 
 export async function renderCertificateBuffer(
@@ -93,8 +46,6 @@ export async function renderCertificateBuffer(
           redirect: "follow",
         });
         if (res.ok) {
-          // Use streaming chunk collection instead of arrayBuffer() to avoid
-          // the SharedArrayBuffer restriction in Next.js API routes.
           const chunks: Uint8Array[] = [];
           const reader = res.body!.getReader();
           while (true) {
@@ -137,7 +88,6 @@ export async function renderCertificateBuffer(
   }
 
   // Step 3: Determine output canvas size — cap at MAX to avoid huge files
-  // Preserve the template's aspect ratio while capping at MAX_OUTPUT dimensions
   let canvasWidth = templateWidth;
   let canvasHeight = templateHeight;
 
@@ -154,7 +104,6 @@ export async function renderCertificateBuffer(
   }
 
   // Step 4: Scale the stored editor coordinates to the output canvas size
-  // Editor stores coords against 1200x850; we scale to the output canvas
   const scaleX = canvasWidth / EDITOR_CANVAS_WIDTH;
   const scaleY = canvasHeight / EDITOR_CANVAS_HEIGHT;
 
@@ -175,57 +124,73 @@ export async function renderCertificateBuffer(
   const rollFontWeight = resolveFontWeight(rollCfg.font, "400");
   const rollAnchor = rollCfg.align === "center" ? "middle" : rollCfg.align === "right" ? "end" : "start";
 
-  const nameFontFamily = getFontFamilyName(nameCfg.font);
-  const rollFontFamily = getFontFamilyName(rollCfg.font);
+  // Step 5: Build standard SVG containing the text layout
+  // We use standard dominant-baseline for vertical alignment.
+  const svgOverlayString = `<svg xmlns="http://www.w3.org/2000/svg" width="${canvasWidth}" height="${canvasHeight}">
+    <text
+      x="${nameX}"
+      y="${nameY}"
+      font-family="Poppins"
+      font-size="${nameSize}"
+      font-weight="${nameFontWeight}"
+      fill="${nameColor}"
+      text-anchor="${nameAnchor}"
+      dominant-baseline="central"
+    >${escapeXml(studentName)}</text>
+    <text
+      x="${rollX}"
+      y="${rollY}"
+      font-family="Poppins"
+      font-size="${rollSize}"
+      font-weight="${rollFontWeight}"
+      fill="${rollColor}"
+      text-anchor="${rollAnchor}"
+      dominant-baseline="central"
+    >${escapeXml(rollNo)}</text>
+  </svg>`;
 
-  // Debugging log requested in prompt
-  console.log({
-    studentName,
-    rollNo,
-    nameFontFamily,
-    nameFontWeight,
-    nameSize,
-    namePos: { x: nameX, y: nameY },
-    rollFontFamily,
-    rollFontWeight,
-    rollSize,
-    rollPos: { x: rollX, y: rollY }
-  });
+  console.log("========== SVG RENDER ==========");
+  console.log("Student:", studentName, "Roll:", rollNo);
+  console.log("SVG overlay size:", canvasWidth, "x", canvasHeight);
+  console.log("================================");
 
-  // Step 5: Create SVG text overlay at the output canvas size
-  // Step 5: Create SVG text overlay at the output canvas size
-  const svgOverlayString = `
-<svg xmlns="http://www.w3.org/2000/svg" width="${canvasWidth}" height="${canvasHeight}">
-  <rect width="100%" height="100%" fill="white"/>
+  // Step 6: Render SVG text layer to PNG using `@resvg/resvg-js`
+  // We inject custom font buffers from embeddedFonts.ts directly into resvg.
+  // Note: fontBuffers is fully supported in resvg-js >= 2.5.0 but is missing from
+  // the library's TypeScript definitions. We use @ts-ignore to bypass compilation errors.
+  const resvg = new Resvg(svgOverlayString, {
+    font: {
+      fontBuffers: [
+        Buffer.from(POPPINS_BOLD_BASE64, "base64"),
+        Buffer.from(POPPINS_REGULAR_BASE64, "base64"),
+      ],
+      defaultFontFamily: "Poppins",
+      loadSystemFonts: false,
+    },
+  } as any);
 
-  <text
-    x="${canvasWidth / 2}"
-    y="${canvasHeight / 2}"
-    font-size="72"
-    fill="red"
-    text-anchor="middle"
-  >
-    HELLO WORLD
-  </text>
-</svg>
-`;
+  const pngData = resvg.render();
+  const textOverlayBuffer = pngData.asPng();
 
-  // Detailed SVG debugging requested in prompt
-  console.log("========== SVG DEBUG ==========");
-  console.log("Student:", studentName);
-  console.log("Roll:", rollNo);
-  console.log("SVG:");
-  console.log(svgOverlayString);
-  console.log("===============================");
+  let outputBuffer: Buffer;
 
-  const svgOverlay = Buffer.from(svgOverlayString);
+  // Step 7: Composite text overlay buffer onto the resized template background image using Sharp
+  if (bgBuffer) {
+    let pipeline = sharp(bgBuffer).flatten({ background: { r: 255, g: 255, b: 255 } });
 
-  // Render SVG text alone as PNG to isolate rendering issues
-  const svgPng = await sharp(svgOverlay)
-    .png()
-    .toBuffer();
+    if (templateWidth !== canvasWidth || templateHeight !== canvasHeight) {
+      pipeline = pipeline.resize(canvasWidth, canvasHeight, { fit: "fill" });
+    }
 
-  console.log("[cert] SVG rendered successfully directly to PNG buffer:", svgPng.length, "bytes");
-  return svgPng;
+    outputBuffer = await pipeline
+      .composite([{ input: textOverlayBuffer, top: 0, left: 0 }])
+      .png({ compressionLevel: 6 })
+      .toBuffer();
+  } else {
+    // If no background image, return the text overlay directly
+    outputBuffer = textOverlayBuffer;
+  }
 
+  console.log(`[cert] Output successfully generated: ${outputBuffer.length} bytes`);
+  return outputBuffer;
 }

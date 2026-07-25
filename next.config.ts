@@ -1,14 +1,13 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // sharp must be treated as an external package so Vercel uses its pre-built Linux binary
-  serverExternalPackages: ["sharp"],
+  // sharp and resvg must be treated as external packages so Vercel uses their pre-built Linux binaries
+  serverExternalPackages: ["sharp", "@resvg/resvg-js"],
 
-  // Ensure sharp's native .node binaries and custom fonts are included in Vercel's output file tracing.
-  // Without this, sharp fails silently on Vercel and local fonts are missing during serverless execution.
+  // Ensure native .node binaries and assets are included in Vercel's output file tracing.
   outputFileTracingIncludes: {
-    "/api/generate-certificates": ["./node_modules/sharp/**/*", "./public/fonts/**/*"],
-    "/api/preview-certificate": ["./node_modules/sharp/**/*", "./public/fonts/**/*"],
+    "/api/generate-certificates": ["./node_modules/sharp/**/*", "./node_modules/@resvg/resvg-js/**/*", "./public/fonts/**/*"],
+    "/api/preview-certificate": ["./node_modules/sharp/**/*", "./node_modules/@resvg/resvg-js/**/*", "./public/fonts/**/*"],
   },
 };
 
