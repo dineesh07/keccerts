@@ -36,25 +36,49 @@ function resolveFontWeight(fontFile: string | undefined, defaultWeight = "400"):
 const fontCache = new Map<string, string>();
 
 function getFontBase64(fontFile: string): string {
-  if (fontCache.has(fontFile)) {
-    return fontCache.get(fontFile)!;
-  }
-  try {
-    let cleanFontFile = fontFile.replace(/^.*[\\/]/, "");
-    if (!cleanFontFile.includes(".")) {
-      cleanFontFile += ".ttf";
+  if (!fontFile) return "";
+
+  // Normalize font name
+  let normalized = fontFile.trim();
+  const lowercase = normalized.toLowerCase();
+
+  if (lowercase === "poppins") {
+    normalized = "Poppins-Regular.ttf";
+  } else if (lowercase === "inter") {
+    normalized = "Inter-Regular.ttf";
+  } else if (lowercase === "plusjakartasans") {
+    normalized = "PlusJakartaSans-Regular.ttf";
+  } else {
+    let clean = normalized.replace(/^.*[\\/]/, "");
+    if (!clean.includes(".")) {
+      clean += ".ttf";
     }
-    const fontPath = path.join(process.cwd(), "public", "fonts", cleanFontFile);
+    normalized = clean;
+  }
+
+  if (fontCache.has(normalized)) {
+    return fontCache.get(normalized)!;
+  }
+
+  try {
+    const fontPath = path.join(process.cwd(), "public", "fonts", normalized);
     if (fs.existsSync(fontPath)) {
       const base64 = fs.readFileSync(fontPath).toString("base64");
-      fontCache.set(fontFile, base64);
-      console.log(`[cert] Loaded font ${cleanFontFile} into memory (${base64.length} bytes)`);
+      fontCache.set(normalized, base64);
+      console.log(`[cert] Loaded font ${normalized} into memory (${base64.length} bytes)`);
       return base64;
     } else {
       console.warn(`[cert] Font not found at path: ${fontPath}`);
+
+      // Fallback: try Poppins-Regular.ttf if the requested font is missing
+      const fallbackFont = "Poppins-Regular.ttf";
+      if (normalized !== fallbackFont) {
+        console.log(`[cert] Falling back to ${fallbackFont} for requested font: ${fontFile}`);
+        return getFontBase64(fallbackFont);
+      }
     }
   } catch (err) {
-    console.error(`[cert] Failed to load font ${fontFile}:`, err);
+    console.error(`[cert] Failed to load font ${fontFile} (normalized: ${normalized}):`, err);
   }
   return "";
 }
