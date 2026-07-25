@@ -46,67 +46,6 @@ export async function GET(req: Request) {
       });
     }
 
-    // MODE: svg-overlay — returns the raw SVG string directly to the browser
-    if (mode === "svg-overlay") {
-      const template = await getTemplateByEventId(eventId);
-      const config = template?.config || {
-        name: { x: 600, y: 410, font: "Poppins-Bold.ttf", size: 52, color: "#000000", align: "center" },
-        rollNo: { x: 600, y: 480, font: "Poppins-Regular.ttf", size: 28, color: "#444444", align: "center" },
-      };
-      
-      const canvasWidth = 1200;
-      const canvasHeight = 850;
-      
-      const nameCfg = config.name || { x: 600, y: 410, size: 52, color: "#000000", align: "center", font: "Poppins-Bold.ttf" };
-      const rollCfg = config.rollNo || { x: 600, y: 480, size: 28, color: "#444444", align: "center", font: "Poppins-Regular.ttf" };
-
-      const nameX = nameCfg.x;
-      const nameY = nameCfg.y;
-      const nameSize = nameCfg.size;
-      const nameColor = nameCfg.color || "#000000";
-      const nameFontWeight = (nameCfg.font || "").toLowerCase().includes("bold") ? "bold" : "normal";
-      const nameAnchor = nameCfg.align === "center" ? "middle" : nameCfg.align === "right" ? "end" : "start";
-
-      const rollX = rollCfg.x;
-      const rollY = rollCfg.y;
-      const rollSize = rollCfg.size;
-      const rollColor = rollCfg.color || "#444444";
-      const rollFontWeight = (rollCfg.font || "").toLowerCase().includes("bold") ? "bold" : "normal";
-      const rollAnchor = rollCfg.align === "center" ? "middle" : rollCfg.align === "right" ? "end" : "start";
-
-      const escapeXml = (str: string) => str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
-
-      const svgOverlayString = `<svg width="${canvasWidth}" height="${canvasHeight}" xmlns="http://www.w3.org/2000/svg" style="background: white;">
-        <text
-          x="${nameX}"
-          y="${nameY}"
-          font-family="sans-serif"
-          font-size="${nameSize}"
-          font-weight="${nameFontWeight}"
-          fill="${nameColor}"
-          text-anchor="${nameAnchor}"
-          dy="0.35em"
-        >${escapeXml(name)}</text>
-        <text
-          x="${rollX}"
-          y="${rollY}"
-          font-family="sans-serif"
-          font-size="${rollSize}"
-          font-weight="${rollFontWeight}"
-          fill="${rollColor}"
-          text-anchor="${rollAnchor}"
-          dy="0.35em"
-        >${escapeXml(roll)}</text>
-      </svg>`;
-
-      return new Response(svgOverlayString, {
-        headers: {
-          "Content-Type": "image/svg+xml",
-          "Cache-Control": "no-store",
-        },
-      });
-    }
-
     // MODE: full — full pipeline with real template
     const template = await getTemplateByEventId(eventId);
     const config = template?.config || {
