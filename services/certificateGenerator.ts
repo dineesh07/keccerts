@@ -33,6 +33,32 @@ function resolveFontWeight(fontFile: string | undefined, defaultWeight = "400"):
   return defaultWeight;
 }
 
+const fontCache = new Map<string, string>();
+
+function getFontBase64(fontFile: string): string {
+  if (fontCache.has(fontFile)) {
+    return fontCache.get(fontFile)!;
+  }
+  try {
+    let cleanFontFile = fontFile.replace(/^.*[\\/]/, "");
+    if (!cleanFontFile.includes(".")) {
+      cleanFontFile += ".ttf";
+    }
+    const fontPath = path.join(process.cwd(), "public", "fonts", cleanFontFile);
+    if (fs.existsSync(fontPath)) {
+      const base64 = fs.readFileSync(fontPath).toString("base64");
+      fontCache.set(fontFile, base64);
+      console.log(`[cert] Loaded font ${cleanFontFile} into memory (${base64.length} bytes)`);
+      return base64;
+    } else {
+      console.warn(`[cert] Font not found at path: ${fontPath}`);
+    }
+  } catch (err) {
+    console.error(`[cert] Failed to load font ${fontFile}:`, err);
+  }
+  return "";
+}
+
 export async function renderCertificateBuffer(
   templateImageUrl: string,
   studentName: string,
@@ -136,11 +162,50 @@ export async function renderCertificateBuffer(
   console.log(`[cert] Roll: pos=(${rollX},${rollY}), size=${rollSize}px, color=${rollColor}`);
 
   // Step 5: Create SVG text overlay at the output canvas size
+  const nameFontFile = nameCfg.font || "Poppins-Bold.ttf";
+  const rollFontFile = rollCfg.font || "Poppins-Regular.ttf";
+
+  const nameFontBase64 = getFontBase64(nameFontFile);
+  const rollFontBase64 = getFontBase64(rollFontFile);
+
+  const nameFontFamily = nameFontFile.replace(/\.[^/.]+$/, "");
+  const rollFontFamily = rollFontFile.replace(/\.[^/.]+$/, "");
+
+  let fontStyleBlock = "";
+  if (nameFontBase64) {
+    fontStyleBlock += `
+      @font-face {
+        font-family: '${nameFontFamily}';
+        src: url('data:font/ttf;charset=utf-8;base64,${nameFontBase64}') format('truetype');
+        font-weight: ${nameFontWeight};
+        font-style: normal;
+      }
+    `;
+  }
+  if (rollFontBase64 && rollFontFile !== nameFontFile) {
+    fontStyleBlock += `
+      @font-face {
+        font-family: '${rollFontFamily}';
+        src: url('data:font/ttf;charset=utf-8;base64,${rollFontBase64}') format('truetype');
+        font-weight: ${rollFontWeight};
+        font-style: normal;
+      }
+    `;
+  }
+
+  const nameFontStack = nameFontBase64 ? `'${nameFontFamily}', Arial, sans-serif` : "Arial, sans-serif";
+  const rollFontStack = rollFontBase64 ? `'${rollFontFamily}', Arial, sans-serif` : "Arial, sans-serif";
+
   const svgOverlay = Buffer.from(`<svg width="${canvasWidth}" height="${canvasHeight}" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <style>
+          ${fontStyleBlock}
+        </style>
+      </defs>
       <text
         x="${nameX}"
         y="${nameY}"
-        font-family="Arial, Helvetica, sans-serif"
+        font-family="${nameFontStack}"
         font-size="${nameSize}"
         font-weight="${nameFontWeight}"
         fill="${nameColor}"
@@ -150,7 +215,7 @@ export async function renderCertificateBuffer(
       <text
         x="${rollX}"
         y="${rollY}"
-        font-family="Arial, Helvetica, sans-serif"
+        font-family="${rollFontStack}"
         font-size="${rollSize}"
         font-weight="${rollFontWeight}"
         fill="${rollColor}"
