@@ -43,20 +43,25 @@ export async function uploadCertificateToR2(
   filename: string,
   contentType = "image/png"
 ): Promise<string> {
+  const usingKey = supabaseServiceKey.includes("service_role")
+    ? "service_role"
+    : "anon (⚠️ uploads may fail — set SUPABASE_SERVICE_ROLE_KEY in env)";
+  console.log(`[r2Service] Uploading "${filename}" using key type: ${usingKey}`);
+
   // 1. Primary: Upload PNG to Supabase Storage bucket "certificates" using admin privileges
   try {
     // Ensure bucket exists
     try {
       await supabaseAdmin.storage.createBucket("certificates", { public: true });
     } catch {
-      // ignore
+      // ignore — bucket likely already exists
     }
 
     // Use Uint8Array inside Blob for binary-safe transport.
     // Passing a plain Buffer to Blob([buffer]) can be treated as a string array in some
     // Node.js/Edge environments, causing UTF-8 corruption. Uint8Array is always binary-safe.
     const fileBlob = new Blob([new Uint8Array(fileBuffer)], { type: contentType });
-    const { data: uploadData, error: uploadErr } = await supabaseAdmin.storage
+    const { error: uploadErr } = await supabaseAdmin.storage
       .from("certificates")
       .upload(filename, fileBlob, {
         contentType,
@@ -70,13 +75,14 @@ export async function uploadCertificateToR2(
         .getPublicUrl(filename);
 
       if (publicUrlData?.publicUrl) {
+        console.log(`[r2Service] Supabase upload success: ${publicUrlData.publicUrl}`);
         return publicUrlData.publicUrl;
       }
     } else {
-      console.warn("Supabase storage upload notice:", uploadErr.message);
+      console.error("[r2Service] Supabase storage upload error:", uploadErr.message, uploadErr);
     }
   } catch (err) {
-    console.warn("Supabase storage certificate upload exception:", err);
+    console.error("[r2Service] Supabase storage upload exception:", err);
   }
 
   // 2. Secondary Fallback: Cloudflare R2 if configured
@@ -92,13 +98,18 @@ export async function uploadCertificateToR2(
         })
       );
       const cleanDomain = publicDomain.endsWith("/") ? publicDomain.slice(0, -1) : publicDomain;
-      return `${cleanDomain}/${key}`;
+      const url = `${cleanDomain}/${key}`;
+      console.log(`[r2Service] R2 upload success: ${url}`);
+      return url;
     } catch (err) {
-      console.warn("Cloudflare R2 upload failed:", err);
+      console.error("[r2Service] Cloudflare R2 upload failed:", err);
     }
   }
 
-  // 3. Fallback: Get public URL from Supabase Storage
+  // 3. Last resort: return Supabase public URL (file may not have uploaded, but log it)
+  console.error(
+    "[r2Service] ⚠️ All upload methods failed. Returning public URL anyway — certificate may not exist in storage."
+  );
   const { data: fallbackUrlData } = supabaseAdmin.storage
     .from("certificates")
     .getPublicUrl(filename);

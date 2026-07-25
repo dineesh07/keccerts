@@ -5,6 +5,11 @@ import { uploadCertificateToR2 } from "@/services/r2Service";
 import { supabase } from "@/lib/supabase";
 import type { TemplateConfig, ParticipantRecord } from "@/types";
 
+// Extend Vercel serverless function timeout.
+// Default is 10s (Hobby) which is too short for sharp image processing + Supabase uploads.
+// Max on Hobby plan is 60s; Pro plan allows up to 300s.
+export const maxDuration = 60;
+
 function toValidIsoDate(dateStr?: string): string {
   if (!dateStr) return new Date().toISOString().split("T")[0];
   const trimmed = dateStr.trim();
