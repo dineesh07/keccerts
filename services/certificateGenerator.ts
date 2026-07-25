@@ -165,7 +165,7 @@ export async function renderCertificateBuffer(
   console.log("================================");
 
   // Step 6: Load font files dynamically from disk
-  const fontBuffers: Buffer[] = [];
+  const fontBuffers: Uint8Array[] = [];
   const fontFiles = [
     "Poppins-Bold.ttf",
     "Poppins-Regular.ttf",
@@ -178,8 +178,9 @@ export async function renderCertificateBuffer(
   for (const file of fontFiles) {
     const fontPath = path.join(process.cwd(), "public", "fonts", file);
     if (fs.existsSync(fontPath)) {
-      fontBuffers.push(fs.readFileSync(fontPath));
-      console.log(`[cert] Loaded font buffer: ${file}`);
+      const buf = fs.readFileSync(fontPath);
+      fontBuffers.push(new Uint8Array(buf));
+      console.log(`[cert] Loaded font buffer: ${file}, size: ${buf.length} bytes`);
     } else {
       console.warn(`[cert] Font file not found: ${fontPath}`);
     }
@@ -192,6 +193,7 @@ export async function renderCertificateBuffer(
       defaultFontFamily: "Poppins",
       loadSystemFonts: false,
     },
+    logLevel: "debug",
   } as any);
 
   const pngData = resvg.render();
