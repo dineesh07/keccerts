@@ -218,42 +218,22 @@ export async function renderCertificateBuffer(
       >${escapeXml(rollNo)}</text>
     </svg>`;
 
-  // Log the complete SVG string before passing to Sharp
-  console.log("[cert] SVG overlay string:\n", svgOverlayString);
+  // Detailed SVG debugging requested in prompt
+  console.log("========== SVG DEBUG ==========");
+  console.log("Student:", studentName);
+  console.log("Roll:", rollNo);
+  console.log("SVG:");
+  console.log(svgOverlayString);
+  console.log("===============================");
 
   const svgOverlay = Buffer.from(svgOverlayString);
 
-  // Step 6: Composite SVG text over (resized) background
-  // Pipeline: sharp(input) → resize (if needed) → flatten → composite → png → toBuffer()
-  let outputBuffer: Buffer;
+  // Render SVG text alone as PNG to isolate rendering issues
+  const svgPng = await sharp(svgOverlay)
+    .png()
+    .toBuffer();
 
-  if (bgBuffer) {
-    let pipeline = sharp(bgBuffer).flatten({ background: { r: 255, g: 255, b: 255 } });
+  console.log("[cert] SVG rendered successfully directly to PNG buffer:", svgPng.length, "bytes");
+  return svgPng;
 
-    // Only resize if the template is larger than the max output size
-    if (templateWidth !== canvasWidth || templateHeight !== canvasHeight) {
-      pipeline = pipeline.resize(canvasWidth, canvasHeight, { fit: "fill" });
-    }
-
-    outputBuffer = await pipeline
-      .composite([{ input: svgOverlay, top: 0, left: 0 }])
-      .png({ compressionLevel: 6 })
-      .toBuffer();
-  } else {
-    // No background: create a white canvas
-    outputBuffer = await sharp({
-      create: {
-        width: canvasWidth,
-        height: canvasHeight,
-        channels: 4,
-        background: { r: 255, g: 255, b: 255, alpha: 1 },
-      },
-    })
-      .composite([{ input: svgOverlay, top: 0, left: 0 }])
-      .png({ compressionLevel: 6 })
-      .toBuffer();
-  }
-
-  console.log(`[cert] Output: ${outputBuffer.length} bytes (${canvasWidth}x${canvasHeight}) for "${studentName}"`);
-  return outputBuffer;
 }
