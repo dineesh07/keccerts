@@ -73,9 +73,16 @@ export async function POST(req: Request) {
         // 2. Render certificate image
         const imageBuffer = await renderCertificateBuffer(templateUrl, cleanName, rollUpper, config);
 
-        // 3. Upload certificate to Cloudflare R2
-        const filename = `${eventId}-${rollUpper.toLowerCase()}-${Date.now()}.png`;
-        const certificateUrl = await uploadCertificateToR2(imageBuffer, filename, "image/png");
+        const certificateUrl = ""; // Mock declaration to bypass TS compilation errors
+
+        // TEMPORARY DIAGNOSTIC TEST: Return the PNG buffer directly
+        return new NextResponse(new Uint8Array(imageBuffer), {
+          status: 200,
+          headers: {
+            "Content-Type": "image/png",
+            "Cache-Control": "no-store",
+          },
+        });
 
         // 4. Upsert student profile in Supabase
         await supabase.from("students").upsert(
@@ -96,7 +103,7 @@ export async function POST(req: Request) {
         });
 
         // Fallback: If FK error on event_id, insert with event_id set to null
-        if (partErr && (partErr.code === "23503" || partErr.message?.includes("foreign key"))) {
+        if (partErr && (partErr?.code === "23503" || partErr?.message?.includes("foreign key"))) {
           console.warn(`FK constraint on event_id ${eventId}, retrying without event_id...`);
           const fallbackRes = await supabase.from("participations").insert({
             roll_no: rollUpper,
@@ -116,7 +123,7 @@ export async function POST(req: Request) {
             name: cleanName,
             rollNo: rollUpper,
             status: "failed",
-            error: `Failed to save in DB: ${partErr.message}`,
+            error: `Failed to save in DB: ${partErr?.message}`,
           });
           continue;
         }
