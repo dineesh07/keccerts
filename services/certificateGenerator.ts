@@ -8,6 +8,7 @@ import sharp from "sharp";
 import fs from "fs";
 import path from "path";
 import type { TemplateConfig } from "@/types";
+import { POPPINS_BOLD_BASE64, POPPINS_REGULAR_BASE64 } from "@/lib/embeddedFonts";
 
 // Maximum output certificate dimensions (keeps file size manageable while retaining quality)
 // A4 landscape at 150 DPI = 1754 x 1240 — good for print and web
@@ -33,54 +34,17 @@ function resolveFontWeight(fontFile: string | undefined, defaultWeight = "400"):
   return defaultWeight;
 }
 
-const fontCache = new Map<string, string>();
-
 function getFontBase64(fontFile: string): string {
-  if (!fontFile) return "";
+  if (!fontFile) return POPPINS_REGULAR_BASE64;
+  const clean = fontFile.trim().toLowerCase();
 
-  // Normalize font name
-  let normalized = fontFile.trim();
-  const lowercase = normalized.toLowerCase();
-
-  if (lowercase === "poppins") {
-    normalized = "Poppins-Regular.ttf";
-  } else if (lowercase === "inter") {
-    normalized = "Inter-Regular.ttf";
-  } else if (lowercase === "plusjakartasans") {
-    normalized = "PlusJakartaSans-Regular.ttf";
-  } else {
-    let clean = normalized.replace(/^.*[\\/]/, "");
-    if (!clean.includes(".")) {
-      clean += ".ttf";
-    }
-    normalized = clean;
+  // If configuration specifies bold, return Poppins Bold
+  if (clean.includes("bold") || clean.includes("700")) {
+    return POPPINS_BOLD_BASE64;
   }
 
-  if (fontCache.has(normalized)) {
-    return fontCache.get(normalized)!;
-  }
-
-  try {
-    const fontPath = path.join(process.cwd(), "public", "fonts", normalized);
-    if (fs.existsSync(fontPath)) {
-      const base64 = fs.readFileSync(fontPath).toString("base64");
-      fontCache.set(normalized, base64);
-      console.log(`[cert] Loaded font ${normalized} into memory (${base64.length} bytes)`);
-      return base64;
-    } else {
-      console.warn(`[cert] Font not found at path: ${fontPath}`);
-
-      // Fallback: try Poppins-Regular.ttf if the requested font is missing
-      const fallbackFont = "Poppins-Regular.ttf";
-      if (normalized !== fallbackFont) {
-        console.log(`[cert] Falling back to ${fallbackFont} for requested font: ${fontFile}`);
-        return getFontBase64(fallbackFont);
-      }
-    }
-  } catch (err) {
-    console.error(`[cert] Failed to load font ${fontFile} (normalized: ${normalized}):`, err);
-  }
-  return "";
+  // Otherwise return Poppins Regular
+  return POPPINS_REGULAR_BASE64;
 }
 
 export async function renderCertificateBuffer(
