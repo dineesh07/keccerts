@@ -27,9 +27,14 @@ type EventsCtx = {
 const EventsContext = createContext<EventsCtx | null>(null);
 
 export function EventsStoreProvider({ children }: { children: React.ReactNode }) {
-  const [events, setEvents] = useState<EventCard[]>(() => getEvents());
+  // Start with empty array on server; populate after mount to avoid hydration mismatch.
+  // (localStorage is not available during SSR)
+  const [events, setEvents] = useState<EventCard[]>([]);
 
   useEffect(() => {
+    // Load from localStorage first for instant display, then sync with Supabase
+    setEvents(getEvents());
+
     fetchEventsFromSupabase().then((data) => {
       setEvents([...data]);
     });
@@ -42,6 +47,7 @@ export function EventsStoreProvider({ children }: { children: React.ReactNode })
     window.addEventListener("storage", handleStorage);
     return () => window.removeEventListener("storage", handleStorage);
   }, []);
+
 
   const refresh = useCallback(async () => {
     const data = await fetchEventsFromSupabase();

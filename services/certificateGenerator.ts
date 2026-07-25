@@ -9,6 +9,15 @@ import fs from "fs";
 import path from "path";
 import type { TemplateConfig } from "@/types";
 
+// Maximum output certificate dimensions (keeps file size manageable while retaining quality)
+// A4 landscape at 150 DPI = 1754 x 1240 — good for print and web
+const MAX_OUTPUT_WIDTH = 2480;
+const MAX_OUTPUT_HEIGHT = 1754;
+
+// The reference canvas size used by the TemplateEditor for coordinate storage
+const EDITOR_CANVAS_WIDTH = 1200;
+const EDITOR_CANVAS_HEIGHT = 850;
+
 function escapeXml(str: string): string {
   return str
     .replace(/&/g, "&amp;")
@@ -36,14 +45,27 @@ export async function renderCertificateBuffer(
   if (templateImageUrl) {
     if (templateImageUrl.startsWith("http://") || templateImageUrl.startsWith("https://")) {
       try {
-        const res = await fetch(templateImageUrl);
+        const res = await fetch(templateImageUrl, {
+          headers: { Accept: "image/*,*/*" },
+          redirect: "follow",
+        });
         if (res.ok) {
-          bgBuffer = Buffer.from(await res.arrayBuffer());
+          // Use streaming chunk collection instead of arrayBuffer() to avoid
+          // the SharedArrayBuffer restriction in Next.js API routes.
+          const chunks: Uint8Array[] = [];
+          const reader = res.body!.getReader();
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            if (value) chunks.push(value);
+          }
+          bgBuffer = Buffer.concat(chunks);
+          console.log(`[cert] Template fetched: ${bgBuffer.length} bytes from ${templateImageUrl}`);
         } else {
-          console.warn("Failed to fetch template image, status:", res.status);
+          console.warn(`[cert] Template fetch failed: HTTP ${res.status} for ${templateImageUrl}`);
         }
       } catch (err) {
-        console.warn("Failed to fetch template image URL:", err);
+        console.warn("[cert] Failed to fetch template image URL:", err);
       }
     } else if (templateImageUrl.startsWith("data:image")) {
       const base64 = templateImageUrl.split(",")[1];
@@ -55,24 +77,43 @@ export async function renderCertificateBuffer(
     }
   }
 
-  // Step 2: Get actual image dimensions from background
-  let canvasWidth = 1200;
-  let canvasHeight = 850;
+  // Step 2: Get template dimensions and decide on output canvas size
+  let templateWidth = EDITOR_CANVAS_WIDTH;
+  let templateHeight = EDITOR_CANVAS_HEIGHT;
 
   if (bgBuffer) {
     try {
       const meta = await sharp(bgBuffer).metadata();
-      canvasWidth = meta.width || 1200;
-      canvasHeight = meta.height || 850;
+      templateWidth = meta.width || EDITOR_CANVAS_WIDTH;
+      templateHeight = meta.height || EDITOR_CANVAS_HEIGHT;
+      console.log(`[cert] Template dimensions: ${templateWidth}x${templateHeight} (${meta.format})`);
     } catch (err) {
-      console.warn("Could not read image metadata:", err);
+      console.warn("[cert] Could not read image metadata:", err);
+      bgBuffer = null;
     }
   }
 
-  // Step 3: Read config and scale to actual image size
-  // Config X/Y coords are stored against a 1200x850 canvas (as set by TemplateEditor)
-  const scaleX = canvasWidth / 1200;
-  const scaleY = canvasHeight / 850;
+  // Step 3: Determine output canvas size — cap at MAX to avoid huge files
+  // Preserve the template's aspect ratio while capping at MAX_OUTPUT dimensions
+  let canvasWidth = templateWidth;
+  let canvasHeight = templateHeight;
+
+  if (canvasWidth > MAX_OUTPUT_WIDTH || canvasHeight > MAX_OUTPUT_HEIGHT) {
+    const aspectRatio = templateWidth / templateHeight;
+    if (templateWidth / MAX_OUTPUT_WIDTH > templateHeight / MAX_OUTPUT_HEIGHT) {
+      canvasWidth = MAX_OUTPUT_WIDTH;
+      canvasHeight = Math.round(MAX_OUTPUT_WIDTH / aspectRatio);
+    } else {
+      canvasHeight = MAX_OUTPUT_HEIGHT;
+      canvasWidth = Math.round(MAX_OUTPUT_HEIGHT * aspectRatio);
+    }
+    console.log(`[cert] Resizing output to: ${canvasWidth}x${canvasHeight} (capped from ${templateWidth}x${templateHeight})`);
+  }
+
+  // Step 4: Scale the stored editor coordinates to the output canvas size
+  // Editor stores coords against 1200x850; we scale to the output canvas
+  const scaleX = canvasWidth / EDITOR_CANVAS_WIDTH;
+  const scaleY = canvasHeight / EDITOR_CANVAS_HEIGHT;
 
   const nameCfg = config.name || { x: 600, y: 410, size: 52, color: "#000000", align: "center", font: "Poppins-Bold.ttf" };
   const rollCfg = config.rollNo || { x: 600, y: 480, size: 28, color: "#444444", align: "center", font: "Poppins-Regular.ttf" };
@@ -91,9 +132,11 @@ export async function renderCertificateBuffer(
   const rollFontWeight = resolveFontWeight(rollCfg.font, "400");
   const rollAnchor = rollCfg.align === "center" ? "middle" : rollCfg.align === "right" ? "end" : "start";
 
-  // Step 4: Create SVG text overlay (transparent background, just text)
-  const svgOverlay = Buffer.from(`
-    <svg width="${canvasWidth}" height="${canvasHeight}" xmlns="http://www.w3.org/2000/svg">
+  console.log(`[cert] Name: pos=(${nameX},${nameY}), size=${nameSize}px, color=${nameColor}`);
+  console.log(`[cert] Roll: pos=(${rollX},${rollY}), size=${rollSize}px, color=${rollColor}`);
+
+  // Step 5: Create SVG text overlay at the output canvas size
+  const svgOverlay = Buffer.from(`<svg width="${canvasWidth}" height="${canvasHeight}" xmlns="http://www.w3.org/2000/svg">
       <text
         x="${nameX}"
         y="${nameY}"
@@ -114,36 +157,39 @@ export async function renderCertificateBuffer(
         text-anchor="${rollAnchor}"
         dominant-baseline="middle"
       >${escapeXml(rollNo)}</text>
-    </svg>
-  `);
+    </svg>`);
 
-  // Step 5: Composite SVG text over background using sharp
-  let base: ReturnType<typeof sharp>;
+  // Step 6: Composite SVG text over (resized) background
+  // Pipeline: sharp(input) → resize (if needed) → flatten → composite → png → toBuffer()
+  let outputBuffer: Buffer;
 
   if (bgBuffer) {
-    base = sharp(bgBuffer).png();
+    let pipeline = sharp(bgBuffer).flatten({ background: { r: 255, g: 255, b: 255 } });
+
+    // Only resize if the template is larger than the max output size
+    if (templateWidth !== canvasWidth || templateHeight !== canvasHeight) {
+      pipeline = pipeline.resize(canvasWidth, canvasHeight, { fit: "fill" });
+    }
+
+    outputBuffer = await pipeline
+      .composite([{ input: svgOverlay, top: 0, left: 0 }])
+      .png({ compressionLevel: 6 })
+      .toBuffer();
   } else {
     // No background: create a white canvas
-    base = sharp({
+    outputBuffer = await sharp({
       create: {
         width: canvasWidth,
         height: canvasHeight,
         channels: 4,
         background: { r: 255, g: 255, b: 255, alpha: 1 },
       },
-    }).png();
+    })
+      .composite([{ input: svgOverlay, top: 0, left: 0 }])
+      .png({ compressionLevel: 6 })
+      .toBuffer();
   }
 
-  const outputBuffer = await base
-    .composite([
-      {
-        input: svgOverlay,
-        top: 0,
-        left: 0,
-      },
-    ])
-    .png({ compressionLevel: 6 })
-    .toBuffer();
-
+  console.log(`[cert] Output: ${outputBuffer.length} bytes (${canvasWidth}x${canvasHeight}) for "${studentName}"`);
   return outputBuffer;
 }

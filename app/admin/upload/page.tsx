@@ -50,7 +50,15 @@ function parseCSV(text: string): ParticipantRecord[] {
 export default function UploadPage() {
   const { events } = useEventsStore();
   const [tab, setTab] = useState<"csv" | "manual">("csv");
-  const [selectedEventId, setSelectedEventId] = useState<string>(events[0]?.id || "");
+  // Initialize as "" to match server render (events not loaded on server).
+  // useEffect sets the first event after client hydration.
+  const [selectedEventId, setSelectedEventId] = useState<string>("");
+
+  useEffect(() => {
+    if (!selectedEventId && events.length > 0) {
+      setSelectedEventId(events[0].id);
+    }
+  }, [events, selectedEventId]);
 
   /* ── CSV State ── */
   const [records, setRecords] = useState<ParticipantRecord[]>([]);

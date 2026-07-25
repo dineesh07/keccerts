@@ -45,6 +45,13 @@ export async function POST(req: Request) {
     const templateUrl = template?.templateUrl || "";
     const issueDate = toValidIsoDate(date);
 
+    if (!templateUrl) {
+      console.warn(`[generate-certificates] No template URL found for eventId="${eventId}". Certificates will render on a plain white background.`);
+    } else {
+      console.log(`[generate-certificates] Using template: ${templateUrl}`);
+    }
+
+
     const results: ParticipantRecord[] = [];
     let successCount = 0;
 
