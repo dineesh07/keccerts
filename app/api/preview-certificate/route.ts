@@ -59,7 +59,8 @@ export async function GET(req: Request) {
 
     const buffer = await renderCertificateBuffer(templateUrl, name, roll, config);
 
-    return new NextResponse(buffer, {
+    // NextResponse requires BodyInit — convert Buffer to Uint8Array
+    return new NextResponse(new Uint8Array(buffer), {
       status: 200,
       headers: {
         "Content-Type": "image/png",
