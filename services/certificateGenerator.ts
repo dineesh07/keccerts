@@ -199,7 +199,7 @@ export async function renderCertificateBuffer(
       <text
         x="${nameX}"
         y="${nameY}"
-        font-family="${nameFontFamily}"
+        font-family="sans-serif"
         font-size="${nameSize}"
         font-weight="${nameFontWeight}"
         fill="${nameColor}"
@@ -209,7 +209,7 @@ export async function renderCertificateBuffer(
       <text
         x="${rollX}"
         y="${rollY}"
-        font-family="${rollFontFamily}"
+        font-family="sans-serif"
         font-size="${rollSize}"
         font-weight="${rollFontWeight}"
         fill="${rollColor}"
