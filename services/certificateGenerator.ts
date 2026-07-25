@@ -2,7 +2,6 @@ import sharp from "sharp";
 import fs from "fs";
 import path from "path";
 import { Resvg } from "@resvg/resvg-js";
-import { POPPINS_BOLD_BASE64, POPPINS_REGULAR_BASE64 } from "@/lib/embeddedFonts";
 import type { TemplateConfig } from "@/types";
 
 // Maximum output certificate dimensions (keeps file size manageable while retaining quality)
@@ -27,6 +26,15 @@ function resolveFontWeight(fontFile: string | undefined, defaultWeight = "400"):
   const f = (fontFile || "").toLowerCase();
   if (f.includes("bold") || f.includes("700")) return "bold";
   return defaultWeight === "700" ? "bold" : "normal";
+}
+
+function getFontFamilyName(fontFile: string | undefined): string {
+  if (!fontFile) return "Poppins";
+  const name = fontFile.trim().toLowerCase();
+  if (name.includes("poppins")) return "Poppins";
+  if (name.includes("inter")) return "Inter";
+  if (name.includes("plusjakartasans") || name.includes("plus jakarta sans")) return "Plus Jakarta Sans";
+  return "Poppins";
 }
 
 export async function renderCertificateBuffer(
@@ -124,14 +132,15 @@ export async function renderCertificateBuffer(
   const rollFontWeight = resolveFontWeight(rollCfg.font, "400");
   const rollAnchor = rollCfg.align === "center" ? "middle" : rollCfg.align === "right" ? "end" : "start";
 
+  const nameFontFamily = getFontFamilyName(nameCfg.font);
+  const rollFontFamily = getFontFamilyName(rollCfg.font);
+
   // Step 5: Build standard SVG containing the text layout
-  // We include a white background rect so we can see the text clearly (black text on transparent is invisible in browser image viewer)
   const svgOverlayString = `<svg xmlns="http://www.w3.org/2000/svg" width="${canvasWidth}" height="${canvasHeight}">
-    <rect width="100%" height="100%" fill="white"/>
     <text
       x="${nameX}"
       y="${nameY}"
-      font-family="Poppins"
+      font-family="${nameFontFamily}"
       font-size="${nameSize}"
       font-weight="${nameFontWeight}"
       fill="${nameColor}"
@@ -141,7 +150,7 @@ export async function renderCertificateBuffer(
     <text
       x="${rollX}"
       y="${rollY}"
-      font-family="Poppins"
+      font-family="${rollFontFamily}"
       font-size="${rollSize}"
       font-weight="${rollFontWeight}"
       fill="${rollColor}"
@@ -155,14 +164,31 @@ export async function renderCertificateBuffer(
   console.log("SVG overlay size:", canvasWidth, "x", canvasHeight);
   console.log("================================");
 
-  // Step 6: Render SVG text layer to PNG using `@resvg/resvg-js`
-  // We inject custom font buffers from embeddedFonts.ts directly into resvg.
+  // Step 6: Load font files dynamically from disk
+  const fontBuffers: Buffer[] = [];
+  const fontFiles = [
+    "Poppins-Bold.ttf",
+    "Poppins-Regular.ttf",
+    "Inter-Bold.ttf",
+    "Inter-Regular.ttf",
+    "PlusJakartaSans-Bold.ttf",
+    "PlusJakartaSans-Regular.ttf"
+  ];
+
+  for (const file of fontFiles) {
+    const fontPath = path.join(process.cwd(), "public", "fonts", file);
+    if (fs.existsSync(fontPath)) {
+      fontBuffers.push(fs.readFileSync(fontPath));
+      console.log(`[cert] Loaded font buffer: ${file}`);
+    } else {
+      console.warn(`[cert] Font file not found: ${fontPath}`);
+    }
+  }
+
+  // Step 7: Render SVG text layer to PNG using `@resvg/resvg-js`
   const resvg = new Resvg(svgOverlayString, {
     font: {
-      fontBuffers: [
-        Buffer.from(POPPINS_BOLD_BASE64, "base64"),
-        Buffer.from(POPPINS_REGULAR_BASE64, "base64"),
-      ],
+      fontBuffers,
       defaultFontFamily: "Poppins",
       loadSystemFonts: false,
     },
@@ -171,5 +197,25 @@ export async function renderCertificateBuffer(
   const pngData = resvg.render();
   const textOverlayBuffer = pngData.asPng();
 
-  return textOverlayBuffer;
+  let outputBuffer: Buffer;
+
+  // Step 8: Composite text overlay buffer onto the template background image using Sharp
+  if (bgBuffer) {
+    let pipeline = sharp(bgBuffer).flatten({ background: { r: 255, g: 255, b: 255 } });
+
+    if (templateWidth !== canvasWidth || templateHeight !== canvasHeight) {
+      pipeline = pipeline.resize(canvasWidth, canvasHeight, { fit: "fill" });
+    }
+
+    outputBuffer = await pipeline
+      .composite([{ input: textOverlayBuffer, top: 0, left: 0 }])
+      .png({ compressionLevel: 6 })
+      .toBuffer();
+  } else {
+    // If no background image, return the text overlay directly
+    outputBuffer = textOverlayBuffer;
+  }
+
+  console.log(`[cert] Output successfully generated: ${outputBuffer.length} bytes`);
+  return outputBuffer;
 }
