@@ -125,28 +125,18 @@ export async function renderCertificateBuffer(
   const rollAnchor = rollCfg.align === "center" ? "middle" : rollCfg.align === "right" ? "end" : "start";
 
   // Step 5: Build standard SVG containing the text layout
-  // We use standard dominant-baseline for vertical alignment.
   const svgOverlayString = `<svg xmlns="http://www.w3.org/2000/svg" width="${canvasWidth}" height="${canvasHeight}">
+    <rect width="100%" height="100%" fill="white"/>
     <text
-      x="${nameX}"
-      y="${nameY}"
-      font-family="Poppins"
-      font-size="${nameSize}"
-      font-weight="${nameFontWeight}"
-      fill="${nameColor}"
-      text-anchor="${nameAnchor}"
-      dominant-baseline="central"
-    >${escapeXml(studentName)}</text>
-    <text
-      x="${rollX}"
-      y="${rollY}"
-      font-family="Poppins"
-      font-size="${rollSize}"
-      font-weight="${rollFontWeight}"
-      fill="${rollColor}"
-      text-anchor="${rollAnchor}"
-      dominant-baseline="central"
-    >${escapeXml(rollNo)}</text>
+      x="${canvasWidth / 2}"
+      y="${canvasHeight / 2}"
+      font-size="72"
+      fill="red"
+      text-anchor="middle"
+      font-family="sans-serif"
+    >
+      HELLO WORLD
+    </text>
   </svg>`;
 
   console.log("========== SVG RENDER ==========");
@@ -155,42 +145,14 @@ export async function renderCertificateBuffer(
   console.log("================================");
 
   // Step 6: Render SVG text layer to PNG using `@resvg/resvg-js`
-  // We inject custom font buffers from embeddedFonts.ts directly into resvg.
-  // Note: fontBuffers is fully supported in resvg-js >= 2.5.0 but is missing from
-  // the library's TypeScript definitions. We use @ts-ignore to bypass compilation errors.
   const resvg = new Resvg(svgOverlayString, {
     font: {
-      fontBuffers: [
-        Buffer.from(POPPINS_BOLD_BASE64, "base64"),
-        Buffer.from(POPPINS_REGULAR_BASE64, "base64"),
-      ],
-      defaultFontFamily: "Poppins",
-      loadSystemFonts: false,
+      loadSystemFonts: true,
     },
   } as any);
 
   const pngData = resvg.render();
   const textOverlayBuffer = pngData.asPng();
 
-  let outputBuffer: Buffer;
-
-  // Step 7: Composite text overlay buffer onto the resized template background image using Sharp
-  if (bgBuffer) {
-    let pipeline = sharp(bgBuffer).flatten({ background: { r: 255, g: 255, b: 255 } });
-
-    if (templateWidth !== canvasWidth || templateHeight !== canvasHeight) {
-      pipeline = pipeline.resize(canvasWidth, canvasHeight, { fit: "fill" });
-    }
-
-    outputBuffer = await pipeline
-      .composite([{ input: textOverlayBuffer, top: 0, left: 0 }])
-      .png({ compressionLevel: 6 })
-      .toBuffer();
-  } else {
-    // If no background image, return the text overlay directly
-    outputBuffer = textOverlayBuffer;
-  }
-
-  console.log(`[cert] Output successfully generated: ${outputBuffer.length} bytes`);
-  return outputBuffer;
+  return textOverlayBuffer;
 }
