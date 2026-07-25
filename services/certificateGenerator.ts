@@ -1,14 +1,7 @@
-/**
- * Server-side Certificate Generator Service
- * Uses `sharp` to composite SVG text over a background template image.
- * sharp is Vercel-compatible (official support) unlike @resvg/resvg-js which needs platform-specific binaries.
- */
-
 import sharp from "sharp";
 import fs from "fs";
 import path from "path";
 import type { TemplateConfig } from "@/types";
-import { POPPINS_BOLD_BASE64, POPPINS_REGULAR_BASE64 } from "@/lib/embeddedFonts";
 
 // Maximum output certificate dimensions (keeps file size manageable while retaining quality)
 // A4 landscape at 150 DPI = 1754 x 1240 — good for print and web
@@ -18,6 +11,46 @@ const MAX_OUTPUT_HEIGHT = 1754;
 // The reference canvas size used by the TemplateEditor for coordinate storage
 const EDITOR_CANVAS_WIDTH = 1200;
 const EDITOR_CANVAS_HEIGHT = 850;
+
+/**
+ * Configure fontconfig dynamically to search local public/fonts folder.
+ * This is required on Vercel because serverless environments have no system fonts,
+ * and librsvg's inline base64 @font-face is not supported or blocked by sandbox policies.
+ */
+function initFontconfig() {
+  if (process.env.NEXT_RUNTIME === "edge") return;
+
+  try {
+    const fontsDir = path.join(process.cwd(), "public", "fonts");
+    const fontconfigDir = "/tmp/fontconfig";
+    const cacheDir = "/tmp/fontconfig-cache";
+    const confPath = path.join(fontconfigDir, "fonts.conf");
+
+    if (!fs.existsSync(fontconfigDir)) {
+      fs.mkdirSync(fontconfigDir, { recursive: true });
+    }
+    if (!fs.existsSync(cacheDir)) {
+      fs.mkdirSync(cacheDir, { recursive: true });
+    }
+
+    const confContent = `<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+<fontconfig>
+  <dir>${fontsDir}</dir>
+  <cachedir>${cacheDir}</cachedir>
+  <config></config>
+</fontconfig>`;
+
+    fs.writeFileSync(confPath, confContent);
+    process.env.FONTCONFIG_PATH = fontconfigDir;
+    console.log(`[fontconfig] Initialized successfully at ${fontconfigDir} pointing to ${fontsDir}`);
+  } catch (err) {
+    console.error("[fontconfig] Initialization failed:", err);
+  }
+}
+
+// Run initialization once at module load
+initFontconfig();
 
 function escapeXml(str: string): string {
   return str
@@ -30,21 +63,17 @@ function escapeXml(str: string): string {
 
 function resolveFontWeight(fontFile: string | undefined, defaultWeight = "400"): string {
   const f = (fontFile || "").toLowerCase();
-  if (f.includes("bold") || f.includes("700")) return "700";
-  return defaultWeight;
+  if (f.includes("bold") || f.includes("700")) return "bold";
+  return defaultWeight === "700" ? "bold" : "normal";
 }
 
-function getFontBase64(fontFile: string): string {
-  if (!fontFile) return POPPINS_REGULAR_BASE64;
-  const clean = fontFile.trim().toLowerCase();
-
-  // If configuration specifies bold, return Poppins Bold
-  if (clean.includes("bold") || clean.includes("700")) {
-    return POPPINS_BOLD_BASE64;
-  }
-
-  // Otherwise return Poppins Regular
-  return POPPINS_REGULAR_BASE64;
+function getFontFamilyName(fontFile: string | undefined): string {
+  if (!fontFile) return "Poppins";
+  const name = fontFile.trim().toLowerCase();
+  if (name.includes("poppins")) return "Poppins";
+  if (name.includes("inter")) return "Inter";
+  if (name.includes("plusjakartasans") || name.includes("plus jakarta sans")) return "Plus Jakarta Sans";
+  return "Poppins"; // Fallback to Poppins
 }
 
 export async function renderCertificateBuffer(
@@ -146,71 +175,53 @@ export async function renderCertificateBuffer(
   const rollFontWeight = resolveFontWeight(rollCfg.font, "400");
   const rollAnchor = rollCfg.align === "center" ? "middle" : rollCfg.align === "right" ? "end" : "start";
 
-  console.log(`[cert] Name: pos=(${nameX},${nameY}), size=${nameSize}px, color=${nameColor}`);
-  console.log(`[cert] Roll: pos=(${rollX},${rollY}), size=${rollSize}px, color=${rollColor}`);
+  const nameFontFamily = getFontFamilyName(nameCfg.font);
+  const rollFontFamily = getFontFamilyName(rollCfg.font);
+
+  // Debugging log requested in prompt
+  console.log({
+    studentName,
+    rollNo,
+    nameFontFamily,
+    nameFontWeight,
+    nameSize,
+    namePos: { x: nameX, y: nameY },
+    rollFontFamily,
+    rollFontWeight,
+    rollSize,
+    rollPos: { x: rollX, y: rollY }
+  });
 
   // Step 5: Create SVG text overlay at the output canvas size
-  const nameFontFile = nameCfg.font || "Poppins-Bold.ttf";
-  const rollFontFile = rollCfg.font || "Poppins-Regular.ttf";
-
-  const nameFontBase64 = getFontBase64(nameFontFile);
-  const rollFontBase64 = getFontBase64(rollFontFile);
-
-  const nameFontFamily = nameFontFile.replace(/\.[^/.]+$/, "");
-  const rollFontFamily = rollFontFile.replace(/\.[^/.]+$/, "");
-
-  let fontStyleBlock = "";
-  if (nameFontBase64) {
-    fontStyleBlock += `
-      @font-face {
-        font-family: '${nameFontFamily}';
-        src: url('data:font/ttf;charset=utf-8;base64,${nameFontBase64}') format('truetype');
-        font-weight: ${nameFontWeight};
-        font-style: normal;
-      }
-    `;
-  }
-  if (rollFontBase64 && rollFontFile !== nameFontFile) {
-    fontStyleBlock += `
-      @font-face {
-        font-family: '${rollFontFamily}';
-        src: url('data:font/ttf;charset=utf-8;base64,${rollFontBase64}') format('truetype');
-        font-weight: ${rollFontWeight};
-        font-style: normal;
-      }
-    `;
-  }
-
-  const nameFontStack = nameFontBase64 ? `'${nameFontFamily}', Arial, sans-serif` : "Arial, sans-serif";
-  const rollFontStack = rollFontBase64 ? `'${rollFontFamily}', Arial, sans-serif` : "Arial, sans-serif";
-
-  const svgOverlay = Buffer.from(`<svg width="${canvasWidth}" height="${canvasHeight}" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <style>
-          ${fontStyleBlock}
-        </style>
-      </defs>
+  // Note: We use dy="0.35em" instead of dominant-baseline="middle"
+  // because dominant-baseline has poor or inconsistent support in some versions of librsvg.
+  const svgOverlayString = `<svg width="${canvasWidth}" height="${canvasHeight}" xmlns="http://www.w3.org/2000/svg">
       <text
         x="${nameX}"
         y="${nameY}"
-        font-family="${nameFontStack}"
+        font-family="${nameFontFamily}"
         font-size="${nameSize}"
         font-weight="${nameFontWeight}"
         fill="${nameColor}"
         text-anchor="${nameAnchor}"
-        dominant-baseline="middle"
+        dy="0.35em"
       >${escapeXml(studentName)}</text>
       <text
         x="${rollX}"
         y="${rollY}"
-        font-family="${rollFontStack}"
+        font-family="${rollFontFamily}"
         font-size="${rollSize}"
         font-weight="${rollFontWeight}"
         fill="${rollColor}"
         text-anchor="${rollAnchor}"
-        dominant-baseline="middle"
+        dy="0.35em"
       >${escapeXml(rollNo)}</text>
-    </svg>`);
+    </svg>`;
+
+  // Log the complete SVG string before passing to Sharp
+  console.log("[cert] SVG overlay string:\n", svgOverlayString);
+
+  const svgOverlay = Buffer.from(svgOverlayString);
 
   // Step 6: Composite SVG text over (resized) background
   // Pipeline: sharp(input) → resize (if needed) → flatten → composite → png → toBuffer()
