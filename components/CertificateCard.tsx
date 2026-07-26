@@ -81,7 +81,7 @@ export function CertificateCard({ participation, index }: CertificateCardProps) 
       </div>
 
       {/* Action buttons */}
-      <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+      <div className="cert-card__actions">
         <a
           href={participation.certificateUrl}
           target="_blank"

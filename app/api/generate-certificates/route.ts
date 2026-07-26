@@ -74,7 +74,13 @@ export async function POST(req: Request) {
         const imageBuffer = await renderCertificateBuffer(templateUrl, cleanName, rollUpper, config);
 
         // 3. Upload certificate to Cloudflare R2 / Supabase Storage
-        const filename = `${eventId}-${rollUpper.toLowerCase()}-${Date.now()}.png`;
+        const eventSlug = contestName
+          .toLowerCase()
+          .trim()
+          .replace(/[^\w\s-]/g, "")
+          .replace(/[\s_]+/g, "-")
+          .replace(/^-+|-+$/g, "");
+        const filename = `${eventSlug}-${rollUpper.toLowerCase()}-${Date.now()}.png`;
         const certificateUrl = await uploadCertificateToR2(imageBuffer, filename, "image/png");
 
         // 4. Upsert student profile in Supabase

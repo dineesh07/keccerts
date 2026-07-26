@@ -749,7 +749,8 @@ export default function UploadPage() {
                               const blobUrl = URL.createObjectURL(blob);
                               const a = document.createElement("a");
                               a.href = blobUrl;
-                              a.download = `${item.roll_no}_${item.student_name.replace(/\s+/g, "_")}_Certificate.png`;
+                              const cleanContest = (item.contest_name || "Event").replace(/\s+/g, "_");
+                              a.download = `${item.roll_no}_${cleanContest}_Certificate.png`;
                               document.body.appendChild(a);
                               a.click();
                               document.body.removeChild(a);

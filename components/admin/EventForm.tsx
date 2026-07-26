@@ -139,8 +139,15 @@ export function EventForm({ initialData, mode }: Props) {
     setSaving(true);
     await new Promise((r) => setTimeout(r, 600));
 
+    const slug = eventName
+      .toLowerCase()
+      .trim()
+      .replace(/[^\w\s-]/g, "")
+      .replace(/[\s_]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+
     const payload: EventCard = {
-      id: initialData?.id ?? `event-${Date.now()}`,
+      id: initialData?.id ?? (slug ? `${slug}` : `event-${Date.now()}`),
       eventName:        eventName.trim(),
       category,
       bannerImageUrl:   bannerPreview || "/event_coding.png",
