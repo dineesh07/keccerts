@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
-import { getTemplateByEventId } from "@/services/templateService";
-import { renderCertificateBuffer } from "@/services/certificateGenerator";
-import { uploadCertificateToR2 } from "@/services/r2Service";
 import { supabase } from "@/lib/supabase";
-import type { TemplateConfig, ParticipantRecord } from "@/types";
+import type { ParticipantRecord } from "@/types";
 
 // Extend Vercel serverless function timeout.
 // Default is 10s (Hobby) which is too short for sharp image processing + Supabase uploads.
@@ -39,22 +36,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 1. Fetch event template configuration
-    const template = await getTemplateByEventId(eventId);
-    const defaultConfig: TemplateConfig = {
-      name: { x: 600, y: 410, font: "Poppins-Bold.ttf", size: 52, color: "#000000", align: "center" },
-      rollNo: { x: 600, y: 480, font: "Poppins-Regular.ttf", size: 28, color: "#444444", align: "center" },
-    };
-
-    const config = template?.config || defaultConfig;
-    const templateUrl = template?.templateUrl || "";
     const issueDate = toValidIsoDate(date);
-
-    if (!templateUrl) {
-      console.warn(`[generate-certificates] No template URL found for eventId="${eventId}". Certificates will render on a plain white background.`);
-    } else {
-      console.log(`[generate-certificates] Using template: ${templateUrl}`);
-    }
 
 
     const results: ParticipantRecord[] = [];
@@ -70,26 +52,16 @@ export async function POST(req: Request) {
         const rollUpper = p.rollNo.trim().toUpperCase();
         const cleanName = p.name.trim();
 
-        // 2. Render certificate image
-        const imageBuffer = await renderCertificateBuffer(templateUrl, cleanName, rollUpper, config);
+        // 2. Set dynamic certificate URL
+        const certificateUrl = `/api/certificates/download?rollNo=${encodeURIComponent(rollUpper)}&eventId=${encodeURIComponent(eventId)}`;
 
-        // 3. Upload certificate to Cloudflare R2 / Supabase Storage
-        const eventSlug = contestName
-          .toLowerCase()
-          .trim()
-          .replace(/[^\w\s-]/g, "")
-          .replace(/[\s_]+/g, "-")
-          .replace(/^-+|-+$/g, "");
-        const filename = `${eventSlug}-${rollUpper.toLowerCase()}-${Date.now()}.png`;
-        const certificateUrl = await uploadCertificateToR2(imageBuffer, filename, "image/png");
-
-        // 4. Upsert student profile in Supabase
+        // 3. Upsert student profile in Supabase
         await supabase.from("students").upsert(
           { roll_no: rollUpper, student_name: cleanName },
           { onConflict: "roll_no" }
         );
 
-        // 5. Insert participation record in Supabase
+        // 4. Insert participation record in Supabase
         let { error: partErr } = await supabase.from("participations").insert({
           roll_no: rollUpper,
           student_name: cleanName,
