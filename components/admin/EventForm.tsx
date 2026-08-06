@@ -59,13 +59,7 @@ export function EventForm({ initialData, mode }: Props) {
   /* ── Category change: swap winner types ── */
   function handleCategoryChange(cat: Category) {
     setCategory(cat);
-    setWinners(
-      winners.map((w, i) =>
-        isHackathon(cat)
-          ? { type: "team" as const, teamName: w.type === "team" ? w.teamName : "", members: [""], position: w.position }
-          : { type: "individual" as const, name: w.type === "individual" ? w.name : "", rollNo: w.type === "individual" ? w.rollNo : "", position: w.position }
-      )
-    );
+    // Removed the forced type mapping to allow users to mix/match Individual and Team winners across all categories
   }
 
   /* ── Banner image ── */
@@ -78,8 +72,12 @@ export function EventForm({ initialData, mode }: Props) {
   }
 
   /* ── Winner helpers ── */
-  function addWinner() {
-    setWinners((prev) => [...prev, isHackathon(category) ? newTeam() : newIndividual()]);
+  function addIndividual() {
+    setWinners((prev) => [...prev, newIndividual()]);
+  }
+
+  function addTeam() {
+    setWinners((prev) => [...prev, newTeam()]);
   }
 
   function removeWinner(idx: number) {
@@ -336,12 +334,17 @@ export function EventForm({ initialData, mode }: Props) {
               <label className="admin-form-label">
                 Winners{" "}
                 <span className="admin-form-label--hint">
-                  ({isHackathon(category) ? "team-based" : "individual"})
+                  (add individual or team winners)
                 </span>
               </label>
-              <button type="button" className="admin-btn admin-btn--xs" onClick={addWinner}>
-                <Plus size={13} /> Add Winner
-              </button>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button type="button" className="admin-btn admin-btn--xs" onClick={addIndividual}>
+                  <Plus size={13} /> Add Individual
+                </button>
+                <button type="button" className="admin-btn admin-btn--xs" onClick={addTeam}>
+                  <Plus size={13} /> Add Team
+                </button>
+              </div>
             </div>
 
             <div className="winners-list">

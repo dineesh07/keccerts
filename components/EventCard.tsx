@@ -11,6 +11,7 @@ import {
   CalendarDays,
   MapPin,
   ChevronRight,
+  Info,
 } from "lucide-react";
 import type { EventCard, Winner } from "@/types";
 import { CATEGORY_CONFIG } from "@/types";
@@ -39,8 +40,9 @@ function WinnerRow({ winner }: { winner: Winner }) {
         </span>
         <span className="winner-name">{winner.teamName}</span>
         {winner.members.length > 0 && (
-          <span className="winner-roll" title={winner.members.join(", ")}>
+          <span className="winner-roll" style={{ display: "inline-flex", alignItems: "center", gap: "4px", cursor: "help" }} title={winner.members.join(", ")}>
             {winner.members.length} members
+            <Info size={14} style={{ color: "var(--text-muted)", opacity: 0.7 }} />
           </span>
         )}
       </li>
