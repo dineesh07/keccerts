@@ -1,8 +1,11 @@
+"use client";
+
 /**
  * Reusable EventCard component.
  * Used by EventsSection (public) and admin live preview.
  */
 
+import { useState, useRef, useEffect } from "react";
 import {
   Trophy,
   Medal,
@@ -31,19 +34,74 @@ function positionConfig(pos: string): PlaceCfg {
 
 function WinnerRow({ winner }: { winner: Winner }) {
   const cfg = positionConfig(winner.position);
+  const [showTooltip, setShowTooltip] = useState(false);
+  const tooltipRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showTooltip) return;
+    const handleClick = (e: MouseEvent) => {
+      if (tooltipRef.current && !tooltipRef.current.contains(e.target as Node)) {
+        setShowTooltip(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [showTooltip]);
+
   if (winner.type === "team") {
     return (
-      <li className="winner-row">
+      <li className="winner-row" style={{ position: "relative" }}>
         <span className={`winner-badge ${cfg.cls}`}>
           {cfg.icon}
           {cfg.label}
         </span>
         <span className="winner-name">{winner.teamName}</span>
         {winner.members.length > 0 && (
-          <span className="winner-roll" style={{ display: "inline-flex", alignItems: "center", gap: "4px", cursor: "help" }} title={winner.members.join(", ")}>
-            {winner.members.length} members
-            <Info size={14} style={{ color: "var(--text-muted)", opacity: 0.7 }} />
-          </span>
+          <div ref={tooltipRef} style={{ display: "flex" }}>
+            <button
+              type="button"
+              className="winner-roll"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "4px",
+                cursor: "pointer",
+                background: "transparent",
+                border: "none",
+                fontFamily: "inherit",
+              }}
+              onClick={() => setShowTooltip(!showTooltip)}
+            >
+              {winner.members.length} members
+              <Info size={14} style={{ color: "var(--text-muted)", opacity: 0.7 }} />
+            </button>
+            {showTooltip && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: "100%",
+                  right: 0,
+                  marginTop: "6px",
+                  background: "var(--white)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "8px",
+                  padding: "10px 14px",
+                  boxShadow: "var(--shadow-md)",
+                  zIndex: 20,
+                  minWidth: "180px",
+                }}
+              >
+                <div style={{ fontSize: "10px", fontWeight: 700, color: "var(--text-muted)", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Team Members</div>
+                <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: "6px" }}>
+                  {winner.members.map((m, i) => (
+                    <li key={i} style={{ fontSize: "13px", color: "var(--navy)", fontWeight: 500, lineHeight: 1.2 }}>
+                      {m}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
         )}
       </li>
     );
