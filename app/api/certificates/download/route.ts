@@ -50,7 +50,7 @@ export async function GET(req: Request) {
     );
 
     // 4. Return the generated image directly to the browser
-    return new NextResponse(imageBuffer as any, {
+    return new NextResponse(new Uint8Array(imageBuffer), {
       status: 200,
       headers: {
         "Content-Type": "image/png",
